@@ -1,89 +1,131 @@
-# Micro-Catchment Retrofit Planner
+# 🌧️ Micro-Catchment Retrofit Planner
 
-> **AR web app for city staff to scan streets and visualize green infrastructure fixes with precise rainfall-based sizing.**
+**AR web app for city staff to scan streets and visualize green infrastructure fixes for flood resilience.**
 
-🌧️ "IKEA Kitchen Planner for flood fixes — AR street scan → grant-ready concepts"
+[![Railway](https://railway.app/button.svg)](https://railway.app/new/template)
 
-## Quick Demo
+## 🎯 Quick Start
 
-Scan this QR code or visit: `[Railway URL after deploy]`
+**Scan this QR code on your phone:**
 
-## Features
+```
+┌─────────────────────────────────┐
+│                                 │
+│   [QR Code - Add your Railway   │
+│    URL here after deployment]   │
+│                                 │
+│   microcatchment-planner.up.    │
+│   railway.app                   │
+│                                 │
+└─────────────────────────────────┘
+```
 
-- **AR Street Scanning**: Use your phone camera to scan streets and detect impervious surfaces
-- **Smart Sizing**: Green infrastructure sized to Berlin rainfall data (Open-Meteo API)
-- **Visual Overlays**: See rain gardens, permeable pavement, and tree planters in AR
-- **PDF Export**: Generate grant-ready concept reports with impact metrics
-- **Share Projects**: Save and share street retrofit concepts with colleagues
+Or visit: **https://your-app.up.railway.app**
 
-## Tech Stack
+---
 
-| Component | Technology |
-|-----------|------------|
-| Frontend | Vite + React 18 + TypeScript |
-| Styling | TailwindCSS v4 |
-| AR | 8th Wall WebAR |
-| Auth/Storage | Supabase |
-| Rainfall Data | Open-Meteo API |
-| PDF Export | html2canvas + jsPDF |
-| Testing | Jest + Cucumber (ATDD) + Playwright |
-| Deploy | Railway |
+## ✨ Features
 
-## Getting Started
+| Feature | Description |
+|---------|-------------|
+| 📱 **AR Street Scanning** | Point camera at streets to detect impervious surfaces |
+| 🌧️ **Real Rainfall Data** | Berlin hourly precipitation from Open-Meteo API |
+| 🌿 **Smart Sizing** | Auto-calculated rain gardens, permeable pavement, tree planters |
+| 📊 **Hydrology Engine** | Peak runoff, reduction percentages, all client-side |
+| 📄 **PDF Export** | Grant-ready reports with cost estimates |
+| 🔗 **Share URLs** | Shareable project links for collaboration |
+| 🔐 **Supabase Auth** | Magic link email login |
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend:** React 19 + TypeScript + Vite
+- **Styling:** TailwindCSS v4
+- **AR:** @google/model-viewer (WebXR)
+- **Backend:** Supabase (Auth + PostgreSQL)
+- **PDF:** html2canvas + jsPDF
+- **Testing:** Jest (34 unit tests) + Playwright (E2E)
+- **Deploy:** Railway
+
+---
+
+## 📐 Hydrology Formulas
+
+```
+Peak Runoff (L/s) = (rainfall_mm_hr × area_m² × coeff) / 3600
+
+Rain Garden Size = runoff × duration × retention_factor
+
+Reduction % = Σ(fix_area × fix_rate) / total_area × 100
+```
+
+**Coefficients:**
+- Impervious (asphalt): 0.9
+- Semi-pervious (gravel): 0.6
+- Permeable (grass): 0.3
+
+---
+
+## 💰 Cost Estimates (Berlin Market)
+
+| Fix Type | €/m² | Reduction Rate |
+|----------|------|----------------|
+| Rain Garden | €800 | 40% |
+| Permeable Pavement | €120 | 70% |
+| Tree Planter | €500 | 25% |
+
+---
+
+## 🏃 Local Development
 
 ```bash
-# Install dependencies
+# Install
 npm install
 
-# Start dev server
+# Dev server
 npm run dev
 
-# Run tests (ATDD)
+# Run tests
 npm test
 
-# Run E2E tests on mobile viewport
-npm run test:e2e:mobile
+# Build
+npm run build
 ```
 
-## Project Structure
+---
 
-```
-├── tests/
-│   ├── acceptance/     # Gherkin feature files (SINGLE SOURCE OF TRUTH)
-│   ├── step-definitions/
-│   └── e2e/           # Playwright E2E tests
-├── public/test/       # Sample street images
-├── src/
-│   ├── components/    # React components
-│   ├── hooks/         # Custom hooks
-│   ├── services/      # API clients
-│   └── utils/         # Hydrology calculations
-└── ...
-```
-
-## Environment Variables
+## 🌍 Environment Variables
 
 ```bash
-# .env.local
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_anon_key
-VITE_8THWALL_APP_KEY=your_8thwall_key
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGci...
 ```
 
-## ATDD Workflow
+---
 
-This project follows **Acceptance Test-Driven Development**:
+## 📋 Grant Eligibility
 
-1. Requirements defined as Gherkin `.feature` files
-2. Tests written BEFORE implementation
-3. Code only written to make tests pass
-4. Green tests = feature complete
+Projects qualify for:
+- 🇪🇺 EU Horizon Europe (climate adaptation)
+- 🚀 EIC Accelerator (green tech innovation)
+- 🏦 German KfW (sustainable development)
+- 🏛️ Berlin Senate (municipal resilience)
 
-```bash
-# Run acceptance tests
-npm run test:acceptance
-```
+---
 
-## License
+## 👨‍👩‍👧‍👦 Team
+
+Built for civil engineers and city planners by [Your Name].
+
+**Domain Expert:** [Brother's Name] - Civil Engineer
+
+---
+
+## 📄 License
 
 MIT
+
+---
+
+*"IKEA Kitchen Planner for flood fixes"* - Berlin Climate Innovation Center 2026

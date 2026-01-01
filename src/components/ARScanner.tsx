@@ -2,6 +2,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { ModelPlacement } from './ModelPlacement';
+import { DemoOverlay, useDemoState } from './DemoOverlay';
 import { openMeteoClient } from '../services/openMeteoClient';
 import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, RUNOFF_COEFFICIENTS } from '../utils/hydrology';
 import type { GreenFix } from '../utils/hydrology';
@@ -18,6 +19,7 @@ export function ARScanner() {
     const [isLoadingRainfall, setIsLoadingRainfall] = useState(true);
     const [fixes, setFixes] = useState<GreenFix[]>([]);
     const [showAR, setShowAR] = useState(false);
+    const { showDemo, completeDemo, skipDemo } = useDemoState();
 
     // Fetch rainfall on mount
     useEffect(() => {
@@ -66,6 +68,11 @@ export function ARScanner() {
 
     return (
         <div className="min-h-screen bg-gray-900 text-white">
+            {/* Demo Overlay for first-time users */}
+            {showDemo && (
+                <DemoOverlay onComplete={completeDemo} onSkip={skipDemo} />
+            )}
+
             {/* Header */}
             <header className="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 backdrop-blur-lg border-b border-gray-700">
                 <div className="flex items-center justify-between px-4 py-3">
