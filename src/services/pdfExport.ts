@@ -1,6 +1,7 @@
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import type { GreenFix } from '../utils/hydrology';
+import { matchEligibleGrants, type Grant } from './grantMatcher';
 
 export interface PDFExportData {
     streetName: string;
@@ -87,7 +88,7 @@ export async function exportProjectPDF(data: PDFExportData): Promise<void> {
     y += 8;
 
     doc.setFontSize(10);
-    doc.text(`• Rainfall Intensity: ${data.rainfall} mm/hr (Berlin design storm)`, 15, y);
+    doc.text(`• Rainfall Intensity: ${data.rainfall} mm/hr (design storm)`, 15, y);
     y += 6;
     doc.text(`• Impervious Area: ${data.totalArea} m²`, 15, y);
     y += 6;
@@ -132,25 +133,49 @@ export async function exportProjectPDF(data: PDFExportData): Promise<void> {
 
     y += 35;
 
-    // ========== GRANT ELIGIBILITY ==========
+    // ========== MATCHED FUNDING PROGRAMS ==========
     doc.setFontSize(12);
-    doc.text('Grant & Funding Eligibility', 10, y);
+    doc.text('Matched Funding Programs', 10, y);
     y += 8;
 
-    doc.setFontSize(9);
-    const grantText = [
-        '• EU Horizon Europe: Climate adaptation & urban resilience programs',
-        '• EIC Accelerator: Green technology innovation funding',
-        '• German KfW: Sustainable urban development loans',
-        '• Berlin Senate: Climate resilience municipal grants',
-        '',
-        'Expected ROI: €1 avoided flood damage per €1 invested (10-year horizon)',
-    ];
-
-    grantText.forEach((line) => {
-        doc.text(line, 15, y);
-        y += 5;
+    // Dynamically match grants based on location and project
+    const grants: Grant[] = matchEligibleGrants({
+        latitude: data.latitude,
+        longitude: data.longitude,
+        totalCostEUR: totalCost,
+        fixes: data.features.map(f => ({ type: f.type, size: f.size })),
+        areaM2: data.totalArea,
     });
+
+    doc.setFontSize(9);
+
+    if (grants.length === 0) {
+        doc.setTextColor(128, 128, 128);
+        doc.text('No matching funding programs found for this location.', 15, y);
+        y += 6;
+    } else {
+        grants.slice(0, 4).forEach((grant) => {
+            doc.setTextColor(0, 0, 0);
+            doc.text(
+                `• ${grant.name}: Up to ${grant.maxFundingPercent}% (max €${grant.maxAmountEUR.toLocaleString()})`,
+                15,
+                y
+            );
+            y += 5;
+            if (grant.url) {
+                doc.setTextColor(59, 130, 246); // Blue
+                doc.text(`  → ${grant.url}`, 15, y);
+                y += 5;
+            }
+        });
+    }
+
+    y += 5;
+
+    // ROI note
+    doc.setFontSize(9);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Expected ROI: €1 avoided flood damage per €1 invested (10-year horizon)', 15, y);
 
     // ========== FOOTER ==========
     doc.setFontSize(8);
@@ -165,3 +190,4 @@ export async function exportProjectPDF(data: PDFExportData): Promise<void> {
     const filename = `${data.streetName.replace(/\s+/g, '_')}_retrofit_plan.pdf`;
     doc.save(filename);
 }
+

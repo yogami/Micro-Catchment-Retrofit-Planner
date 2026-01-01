@@ -104,11 +104,12 @@ describe('PDF Export', () => {
         );
     });
 
-    it('includes grant eligibility text', async () => {
+    it('includes matched funding programs', async () => {
         await exportProjectPDF(mockProject);
 
         const textCalls = mockText.mock.calls.map(c => c[0]).join(' ');
-        expect(textCalls.toLowerCase()).toContain('grant');
+        expect(textCalls.toLowerCase()).toContain('bene2');
+        expect(textCalls.toLowerCase()).toContain('funding');
     });
 
     it('saves PDF with street name in filename', async () => {
