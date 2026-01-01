@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { projectService } from '../services/projectService';
+import { exportProjectPDF } from '../services/pdfExport';
+import { computePeakRunoff, RUNOFF_COEFFICIENTS } from '../utils/hydrology';
 import type { Project } from '../types/database';
 
 export function ProjectView() {
@@ -11,6 +13,8 @@ export function ProjectView() {
     const [error, setError] = useState<string | null>(null);
     const [shareUrl, setShareUrl] = useState<string>('');
     const [copied, setCopied] = useState(false);
+    const [exportingPDF, setExportingPDF] = useState(false);
+    const projectCardRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (id) {
@@ -36,9 +40,34 @@ export function ProjectView() {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const handleExportPDF = () => {
-        // TODO: Implement PDF export
-        alert('PDF export coming soon!');
+    const handleExportPDF = async () => {
+        if (!project) return;
+
+        setExportingPDF(true);
+        try {
+            const peakRunoff = computePeakRunoff(
+                50, // Default Berlin rainfall
+                Number(project.total_area),
+                RUNOFF_COEFFICIENTS.impervious
+            );
+
+            await exportProjectPDF({
+                streetName: project.street_name,
+                latitude: 52.52, // Berlin default
+                longitude: 13.405,
+                rainfall: 50,
+                totalArea: Number(project.total_area),
+                totalReduction: Number(project.total_reduction),
+                features: project.features || [],
+                peakRunoff,
+                screenshotElement: projectCardRef.current,
+            });
+        } catch (error) {
+            console.error('PDF export failed:', error);
+            alert('PDF export failed. Please try again.');
+        } finally {
+            setExportingPDF(false);
+        }
     };
 
     if (loading) {
@@ -84,7 +113,11 @@ export function ProjectView() {
             {/* Main Content */}
             <main className="pt-20 pb-8 px-4">
                 {/* Project Card */}
-                <div className="bg-gradient-to-br from-emerald-900/30 to-cyan-900/30 rounded-2xl overflow-hidden mb-6 border border-emerald-500/20">
+                <div
+                    ref={projectCardRef}
+                    id="ar-container"
+                    className="bg-gradient-to-br from-emerald-900/30 to-cyan-900/30 rounded-2xl overflow-hidden mb-6 border border-emerald-500/20"
+                >
                     {/* Screenshot Placeholder */}
                     <div className="aspect-video bg-gray-800 relative">
                         <div className="absolute inset-4 rounded-xl bg-red-500/20 border border-red-500/50 flex items-center justify-center">
@@ -159,8 +192,8 @@ export function ProjectView() {
                         <button
                             onClick={copyShareUrl}
                             className={`px-4 py-2 rounded-lg font-semibold transition ${copied
-                                    ? 'bg-emerald-500 text-white'
-                                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                ? 'bg-emerald-500 text-white'
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                 }`}
                         >
                             {copied ? '✓' : '📋'}
@@ -172,10 +205,21 @@ export function ProjectView() {
                 <div className="space-y-3">
                     <button
                         onClick={handleExportPDF}
+                        disabled={exportingPDF}
                         className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 
-                      font-semibold shadow-lg hover:shadow-xl transition-all"
+                      font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
                     >
-                        📄 Export PDF Report
+                        {exportingPDF ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                Generating PDF...
+                            </span>
+                        ) : (
+                            '📄 Export PDF Report'
+                        )}
                     </button>
                     <button
                         onClick={() => navigate('/scanner')}
