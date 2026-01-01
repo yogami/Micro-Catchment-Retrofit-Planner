@@ -1,10 +1,5 @@
-/**
- * Open-Meteo Rainfall API Client
- * Fetches hourly precipitation data for Berlin (52.52, 13.405)
- */
-
-const BERLIN_LAT = 52.52;
-const BERLIN_LON = 13.405;
+const DEFAULT_LAT = 52.52; // Berlin
+const DEFAULT_LON = 13.405;
 const CACHE_KEY = 'openmeteo_rainfall_cache';
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour
 
@@ -33,10 +28,10 @@ interface CachedData {
 
 export const openMeteoClient = {
     /**
-     * Fetch hourly rainfall data for Berlin from Open-Meteo API
+     * Fetch hourly rainfall data for specific coordinates from Open-Meteo API
      */
-    async fetchBerlinRainfall(): Promise<RainfallData> {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${BERLIN_LAT}&longitude=${BERLIN_LON}&hourly=precipitation&timezone=Europe%2FBerlin`;
+    async fetchRainfall(lat: number = DEFAULT_LAT, lon: number = DEFAULT_LON): Promise<RainfallData> {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation&timezone=auto`;
 
         try {
             const response = await fetch(url);
@@ -71,16 +66,16 @@ export const openMeteoClient = {
     /**
      * Get the maximum precipitation value from the forecast
      */
-    async getMaxPrecipitation(): Promise<number> {
-        const data = await this.fetchBerlinRainfall();
+    async getMaxPrecipitation(lat?: number, lon?: number): Promise<number> {
+        const data = await this.fetchRainfall(lat, lon);
         return Math.max(...data.precipitation);
     },
 
     /**
      * Get current hour's precipitation
      */
-    async getCurrentPrecipitation(): Promise<number> {
-        const data = await this.fetchBerlinRainfall();
+    async getCurrentPrecipitation(lat?: number, lon?: number): Promise<number> {
+        const data = await this.fetchRainfall(lat, lon);
         const now = new Date();
         const currentHour = now.toISOString().slice(0, 13) + ':00';
 
@@ -91,9 +86,9 @@ export const openMeteoClient = {
     /**
      * Get design storm (e.g., 95th percentile or max)
      */
-    async getDesignStorm(): Promise<number> {
-        const data = await this.fetchBerlinRainfall();
-        // Use max as design storm, or default to 50mm/hr for Berlin
+    async getDesignStorm(lat?: number, lon?: number): Promise<number> {
+        const data = await this.fetchRainfall(lat, lon);
+        // Use max as design storm, or default to 50mm/hr as a safe engineer buffer
         const max = Math.max(...data.precipitation);
         return max > 0 ? max : 50;
     },

@@ -19,22 +19,42 @@ export function ARScanner() {
     const [isLoadingRainfall, setIsLoadingRainfall] = useState(true);
     const [fixes, setFixes] = useState<GreenFix[]>([]);
     const [showAR, setShowAR] = useState(false);
+    const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
+    const [locationName, setLocationName] = useState<string>('Berlin');
     const { showDemo, completeDemo, skipDemo } = useDemoState();
 
-    // Fetch rainfall on mount
+    // Detect location and fetch rainfall
     useEffect(() => {
-        async function loadRainfall() {
-            try {
-                const designStorm = await openMeteoClient.getDesignStorm();
-                setRainfall(designStorm);
-            } catch (error) {
-                console.error('Failed to fetch rainfall:', error);
-                // Use default
-            } finally {
+        async function init() {
+            setIsLoadingRainfall(true);
+            let lat = 52.52; // Default Berlin
+            let lon = 13.405;
+
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    async (pos) => {
+                        lat = pos.coords.latitude;
+                        lon = pos.coords.longitude;
+                        setLocation({ lat, lon });
+                        setLocationName('Current Location');
+                        const storm = await openMeteoClient.getDesignStorm(lat, lon);
+                        setRainfall(storm);
+                        setIsLoadingRainfall(false);
+                    },
+                    async () => {
+                        // Fallback to Berlin
+                        const storm = await openMeteoClient.getDesignStorm(lat, lon);
+                        setRainfall(storm);
+                        setIsLoadingRainfall(false);
+                    }
+                );
+            } else {
+                const storm = await openMeteoClient.getDesignStorm(lat, lon);
+                setRainfall(storm);
                 setIsLoadingRainfall(false);
             }
         }
-        loadRainfall();
+        init();
     }, []);
 
     // Calculate fixes when area is detected
@@ -102,9 +122,9 @@ export function ARScanner() {
                         {/* Rainfall Info */}
                         <div className="mb-6 bg-blue-500/20 rounded-xl px-4 py-2 text-blue-300 text-sm">
                             {isLoadingRainfall ? (
-                                <span>Loading Berlin rainfall data...</span>
+                                <span>Detecting location & rainfall...</span>
                             ) : (
-                                <span>🌧️ Berlin forecast: {rainfall}mm/hr max</span>
+                                <span>🌧️ {locationName} design storm: {rainfall}mm/hr</span>
                             )}
                         </div>
 
@@ -130,23 +150,42 @@ export function ARScanner() {
                             📷 Start AR Scan
                         </button>
 
-                        {/* Test Images Fallback */}
-                        <div className="mt-8 text-center">
-                            <p className="text-xs text-gray-500 mb-3">Or simulate with test areas:</p>
+                        {/* Test Scenarios Fallback */}
+                        <div className="mt-8 text-center max-w-sm">
+                            <p className="text-xs text-gray-500 mb-3 uppercase tracking-wider">Simulated Test Scenarios (Fast Verification)</p>
                             <div className="flex gap-2 justify-center flex-wrap">
-                                {[50, 100, 200].map((area) => (
-                                    <button
-                                        key={area}
-                                        onClick={() => {
-                                            setIsScanning(true);
-                                            setDetectedArea(area);
-                                        }}
-                                        className="px-4 py-2 rounded-lg bg-gray-800 text-sm text-gray-400 
-                              hover:bg-gray-700 transition"
-                                    >
-                                        {area}m²
-                                    </button>
-                                ))}
+                                <button
+                                    onClick={async () => {
+                                        setIsLoadingRainfall(true);
+                                        const lat = 38.8462, lon = -77.3064; // Fairfax, VA
+                                        const storm = await openMeteoClient.getDesignStorm(lat, lon);
+                                        setRainfall(storm);
+                                        setLocation({ lat, lon });
+                                        setLocationName('Fairfax, VA');
+                                        setIsLoadingRainfall(false);
+                                        setIsScanning(true);
+                                        setDetectedArea(120);
+                                    }}
+                                    className="px-4 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-xs text-emerald-400 font-bold hover:bg-emerald-500/30 transition"
+                                >
+                                    🗽 Scenario: Fairfax (120m²)
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        setIsLoadingRainfall(true);
+                                        const lat = 52.52, lon = 13.405; // Berlin
+                                        const storm = await openMeteoClient.getDesignStorm(lat, lon);
+                                        setRainfall(storm);
+                                        setLocation({ lat, lon });
+                                        setLocationName('Berlin');
+                                        setIsLoadingRainfall(false);
+                                        setIsScanning(true);
+                                        setDetectedArea(80);
+                                    }}
+                                    className="px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/30 text-xs text-blue-400 font-bold hover:bg-blue-500/30 transition"
+                                >
+                                    🥨 Scenario: Berlin (80m²)
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -170,6 +209,11 @@ export function ARScanner() {
                                             <div className="bg-black/70 rounded-lg px-4 py-2 text-center">
                                                 <p className="text-red-400 font-mono text-lg">{detectedArea}m² impervious</p>
                                                 <p className="text-xs text-gray-400">Peak runoff: {peakRunoff.toFixed(2)} L/s</p>
+                                                {location && (
+                                                    <p className="text-[10px] text-gray-500 mt-1 font-mono">
+                                                        GPS: {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

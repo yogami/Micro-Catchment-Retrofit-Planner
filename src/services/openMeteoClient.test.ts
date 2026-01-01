@@ -10,8 +10,8 @@ describe('Open-Meteo Rainfall Client', () => {
         localStorage.clear();
     });
 
-    describe('fetchBerlinRainfall', () => {
-        it('fetches rainfall data for Berlin coordinates', async () => {
+    describe('fetchRainfall', () => {
+        it('fetches rainfall data for specific coordinates', async () => {
             const mockResponse = {
                 hourly: {
                     time: ['2026-01-01T00:00', '2026-01-01T01:00'],
@@ -27,13 +27,14 @@ describe('Open-Meteo Rainfall Client', () => {
                 json: async () => mockResponse,
             });
 
-            const result = await openMeteoClient.fetchBerlinRainfall();
+            // Test with Fairfax, VA coords
+            const result = await openMeteoClient.fetchRainfall(38.8462, -77.3064);
 
             expect(mockFetch).toHaveBeenCalledWith(
-                expect.stringContaining('latitude=52.52')
+                expect.stringContaining('latitude=38.8462')
             );
             expect(mockFetch).toHaveBeenCalledWith(
-                expect.stringContaining('longitude=13.405')
+                expect.stringContaining('longitude=-77.3064')
             );
             expect(result.precipitation).toEqual([0.5, 1.2]);
         });
@@ -54,7 +55,7 @@ describe('Open-Meteo Rainfall Client', () => {
                 json: async () => mockResponse,
             });
 
-            const result = await openMeteoClient.fetchBerlinRainfall();
+            const result = await openMeteoClient.fetchRainfall();
 
             expect(result.units).toBe('mm');
         });
@@ -76,12 +77,12 @@ describe('Open-Meteo Rainfall Client', () => {
             });
 
             // First call - fetches from API
-            await openMeteoClient.fetchBerlinRainfall();
+            await openMeteoClient.fetchRainfall();
 
             // Second call with network failure - should use cache
             mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-            const cachedResult = await openMeteoClient.fetchBerlinRainfall();
+            const cachedResult = await openMeteoClient.fetchRainfall();
 
             expect(cachedResult.precipitation).toEqual([25]);
             expect(cachedResult.fromCache).toBe(true);
