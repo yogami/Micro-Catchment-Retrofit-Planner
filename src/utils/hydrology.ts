@@ -149,7 +149,8 @@ export function suggestGreenFixes(
     area_m2: number,
     rainfall_mm_hr: number = 50
 ): GreenFix[] {
-    const peakRunoff = computePeakRunoff(rainfall_mm_hr, area_m2, RUNOFF_COEFFICIENTS.impervious);
+    // Peak runoff could be used for more precise sizing in future iterations
+    void rainfall_mm_hr; // Marked for future use
 
     // Standard recommendations based on area
     const fixes: GreenFix[] = [];
