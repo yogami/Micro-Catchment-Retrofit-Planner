@@ -1,14 +1,48 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { ModelPlacement } from './ModelPlacement';
+import { openMeteoClient } from '../services/openMeteoClient';
+import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, RUNOFF_COEFFICIENTS } from '../utils/hydrology';
+import type { GreenFix } from '../utils/hydrology';
+
+// Import model-viewer
+import '@google/model-viewer';
 
 export function ARScanner() {
     const { user, signOut } = useAuth();
     const navigate = useNavigate();
     const [isScanning, setIsScanning] = useState(false);
     const [detectedArea, setDetectedArea] = useState<number | null>(null);
+    const [rainfall, setRainfall] = useState<number>(50); // Default 50mm/hr
+    const [isLoadingRainfall, setIsLoadingRainfall] = useState(true);
+    const [fixes, setFixes] = useState<GreenFix[]>([]);
+    const [showAR, setShowAR] = useState(false);
 
-    // For now, simulate AR detection since 8th Wall requires API key
+    // Fetch rainfall on mount
+    useEffect(() => {
+        async function loadRainfall() {
+            try {
+                const designStorm = await openMeteoClient.getDesignStorm();
+                setRainfall(designStorm);
+            } catch (error) {
+                console.error('Failed to fetch rainfall:', error);
+                // Use default
+            } finally {
+                setIsLoadingRainfall(false);
+            }
+        }
+        loadRainfall();
+    }, []);
+
+    // Calculate fixes when area is detected
+    useEffect(() => {
+        if (detectedArea) {
+            const suggestedFixes = suggestGreenFixes(detectedArea, rainfall);
+            setFixes(suggestedFixes);
+        }
+    }, [detectedArea, rainfall]);
+
     const handleStartScan = () => {
         setIsScanning(true);
         // Simulate detection after 2 seconds
@@ -21,6 +55,14 @@ export function ARScanner() {
         await signOut();
         navigate('/');
     };
+
+    const totalReduction = fixes.length > 0
+        ? calculateTotalReduction(fixes.map(f => ({ size: f.size, reductionRate: f.reductionRate })), detectedArea || 100)
+        : 0;
+
+    const peakRunoff = detectedArea
+        ? computePeakRunoff(rainfall, detectedArea, RUNOFF_COEFFICIENTS.impervious)
+        : 0;
 
     return (
         <div className="min-h-screen bg-gray-900 text-white">
@@ -50,6 +92,15 @@ export function ARScanner() {
                 {!isScanning ? (
                     /* Pre-scan View */
                     <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
+                        {/* Rainfall Info */}
+                        <div className="mb-6 bg-blue-500/20 rounded-xl px-4 py-2 text-blue-300 text-sm">
+                            {isLoadingRainfall ? (
+                                <span>Loading Berlin rainfall data...</span>
+                            ) : (
+                                <span>🌧️ Berlin forecast: {rainfall}mm/hr max</span>
+                            )}
+                        </div>
+
                         <div className="w-32 h-32 rounded-full bg-gradient-to-r from-red-500/20 to-orange-500/20 
                           border-2 border-red-500/50 flex items-center justify-center mb-6 animate-pulse">
                             <svg className="w-16 h-16 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -61,7 +112,7 @@ export function ARScanner() {
                         </div>
                         <h2 className="text-2xl font-bold mb-2">Ready to Scan</h2>
                         <p className="text-gray-400 mb-8 max-w-xs">
-                            Point your camera at a street, parking lot, or sidewalk to detect impervious surfaces
+                            Point your camera at a street, parking lot, or sidewalk to visualize green infrastructure
                         </p>
                         <button
                             onClick={handleStartScan}
@@ -74,19 +125,19 @@ export function ARScanner() {
 
                         {/* Test Images Fallback */}
                         <div className="mt-8 text-center">
-                            <p className="text-xs text-gray-500 mb-3">Or use test images:</p>
-                            <div className="flex gap-2 justify-center">
-                                {['parking_lot', 'sidewalk', 'road'].map((img) => (
+                            <p className="text-xs text-gray-500 mb-3">Or simulate with test areas:</p>
+                            <div className="flex gap-2 justify-center flex-wrap">
+                                {[50, 100, 200].map((area) => (
                                     <button
-                                        key={img}
+                                        key={area}
                                         onClick={() => {
                                             setIsScanning(true);
-                                            setDetectedArea(100);
+                                            setDetectedArea(area);
                                         }}
-                                        className="px-3 py-1 rounded-lg bg-gray-800 text-xs text-gray-400 
+                                        className="px-4 py-2 rounded-lg bg-gray-800 text-sm text-gray-400 
                               hover:bg-gray-700 transition"
                                     >
-                                        {img}
+                                        {area}m²
                                     </button>
                                 ))}
                             </div>
@@ -95,7 +146,7 @@ export function ARScanner() {
                 ) : (
                     /* Scanning/Detected View */
                     <div className="px-4">
-                        {/* Simulated Camera View */}
+                        {/* Simulated Camera View / Detection */}
                         <div className="relative rounded-2xl overflow-hidden bg-gray-800 aspect-video mb-6">
                             <div className="absolute inset-0 flex items-center justify-center">
                                 {detectedArea === null ? (
@@ -109,9 +160,9 @@ export function ARScanner() {
                                         {/* Red overlay for impervious area */}
                                         <div className="absolute inset-4 rounded-xl bg-red-500/30 border-2 border-red-500 
                                   flex items-center justify-center">
-                                            <div className="bg-black/70 rounded-lg px-4 py-2">
+                                            <div className="bg-black/70 rounded-lg px-4 py-2 text-center">
                                                 <p className="text-red-400 font-mono text-lg">{detectedArea}m² impervious</p>
-                                                <p className="text-xs text-gray-400">Runoff coefficient: 0.9</p>
+                                                <p className="text-xs text-gray-400">Peak runoff: {peakRunoff.toFixed(2)} L/s</p>
                                             </div>
                                         </div>
                                     </div>
@@ -121,61 +172,69 @@ export function ARScanner() {
 
                         {detectedArea !== null && (
                             <>
-                                {/* Detected Info */}
-                                <div className="bg-gray-800 rounded-2xl p-4 mb-6">
-                                    <h3 className="font-semibold mb-3 flex items-center gap-2">
-                                        <span className="w-3 h-3 rounded-full bg-red-500" />
-                                        Detected Impervious Surface
-                                    </h3>
-                                    <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div>
-                                            <p className="text-gray-400">Area</p>
-                                            <p className="font-mono text-lg">{detectedArea}m²</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-400">Peak Runoff</p>
-                                            <p className="font-mono text-lg">1.25 L/s</p>
-                                        </div>
+                                {/* Rainfall + Reduction Stats */}
+                                <div className="grid grid-cols-2 gap-3 mb-6">
+                                    <div className="bg-blue-900/30 rounded-xl p-4 border border-blue-500/30">
+                                        <p className="text-blue-400 text-sm">Rainfall</p>
+                                        <p className="text-2xl font-bold">{rainfall}mm/hr</p>
+                                    </div>
+                                    <div className="bg-emerald-900/30 rounded-xl p-4 border border-emerald-500/30">
+                                        <p className="text-emerald-400 text-sm">Total Reduction</p>
+                                        <p className="text-2xl font-bold text-emerald-400">{Math.round(totalReduction)}%</p>
                                     </div>
                                 </div>
 
-                                {/* Suggested Fixes */}
-                                <div className="bg-gray-800 rounded-2xl p-4 mb-6">
-                                    <h3 className="font-semibold mb-3 flex items-center gap-2">
-                                        <span className="w-3 h-3 rounded-full bg-emerald-500" />
-                                        Suggested Green Fixes
-                                    </h3>
-                                    <div className="space-y-3">
-                                        {[
-                                            { type: 'Rain Garden', size: '20m²', placement: 'Sidewalk edge', reduction: '40%', color: 'blue' },
-                                            { type: 'Permeable Pave', size: '50m²', placement: 'Parking area', reduction: '70%', color: 'emerald' },
-                                            { type: 'Tree Planters', size: '10m² ×3', placement: 'Road verge', reduction: '25%', color: 'green' },
-                                        ].map((fix, i) => (
-                                            <div key={i} className="flex items-center justify-between bg-gray-700/50 rounded-xl p-3">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-10 h-10 rounded-lg bg-${fix.color}-500/20 
-                                        flex items-center justify-center`}>
-                                                        <span className="text-lg">
-                                                            {fix.type === 'Rain Garden' ? '🌿' : fix.type === 'Permeable Pave' ? '🧱' : '🌳'}
-                                                        </span>
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-medium text-sm">{fix.type}</p>
-                                                        <p className="text-xs text-gray-400">{fix.placement}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="font-mono text-sm">{fix.size}</p>
-                                                    <p className="text-xs text-emerald-400">-{fix.reduction}</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="mt-4 pt-4 border-t border-gray-700 flex justify-between items-center">
-                                        <span className="text-gray-400">Total Reduction</span>
-                                        <span className="text-xl font-bold text-emerald-400">&gt;30%</span>
-                                    </div>
+                                {/* Toggle AR View */}
+                                <div className="flex gap-2 mb-4">
+                                    <button
+                                        onClick={() => setShowAR(false)}
+                                        className={`flex-1 py-2 rounded-lg font-semibold transition ${!showAR ? 'bg-white text-gray-900' : 'bg-gray-800 text-gray-400'
+                                            }`}
+                                    >
+                                        📋 List View
+                                    </button>
+                                    <button
+                                        onClick={() => setShowAR(true)}
+                                        className={`flex-1 py-2 rounded-lg font-semibold transition ${showAR ? 'bg-white text-gray-900' : 'bg-gray-800 text-gray-400'
+                                            }`}
+                                    >
+                                        📱 3D/AR View
+                                    </button>
                                 </div>
+
+                                {showAR ? (
+                                    /* 3D Model View */
+                                    <ModelPlacement fixes={fixes} />
+                                ) : (
+                                    /* List View */
+                                    <div className="bg-gray-800 rounded-2xl p-4 mb-6">
+                                        <h3 className="font-semibold mb-3 flex items-center gap-2">
+                                            <span className="w-3 h-3 rounded-full bg-emerald-500" />
+                                            Suggested Green Fixes
+                                        </h3>
+                                        <div className="space-y-3">
+                                            {fixes.map((fix, i) => (
+                                                <div key={i} className="flex items-center justify-between bg-gray-700/50 rounded-xl p-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                                                            <span className="text-lg">
+                                                                {fix.type === 'rain_garden' ? '🌿' : fix.type === 'permeable_pavement' ? '🧱' : '🌳'}
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-sm capitalize">{fix.type.replace('_', ' ')}</p>
+                                                            <p className="text-xs text-gray-400">{fix.placement}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="font-mono text-sm">{fix.size}m²</p>
+                                                        <p className="text-xs text-emerald-400">-{Math.round(fix.reductionRate * 100)}%</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Action Buttons */}
                                 <div className="flex gap-3">
@@ -190,6 +249,7 @@ export function ARScanner() {
                                         onClick={() => {
                                             setIsScanning(false);
                                             setDetectedArea(null);
+                                            setFixes([]);
                                         }}
                                         className="px-4 py-3 rounded-xl bg-gray-700 font-semibold transition-all hover:bg-gray-600"
                                     >

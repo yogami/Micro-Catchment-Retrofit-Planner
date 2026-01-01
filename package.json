@@ -17,6 +17,7 @@
     "test:acceptance": "cucumber-js tests/acceptance/*.feature --require tests/step-definitions/*.ts"
   },
   "dependencies": {
+    "@google/model-viewer": "^4.1.0",
     "@supabase/supabase-js": "^2.89.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.2",
