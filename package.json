@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "serve dist -s -l 3000",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "jest",
@@ -48,6 +49,7 @@
     "jest-environment-jsdom": "^30.2.0",
     "jsdom": "^27.4.0",
     "postcss": "^8.5.6",
+    "serve": "^14.2.5",
     "tailwindcss": "^4.1.18",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
