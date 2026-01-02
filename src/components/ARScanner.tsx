@@ -32,6 +32,7 @@ export function ARScanner() {
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [isDetecting, setIsDetecting] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
+    const [isLocked, setIsLocked] = useState(false);
 
     // Handle Demo Auto-Start
     useEffect(() => {
@@ -55,6 +56,7 @@ export function ARScanner() {
                 }
                 setIsLoadingRainfall(false);
                 setIsScanning(true);
+                setIsLocked(true);
             }
             startDemo();
         }
@@ -107,19 +109,23 @@ export function ARScanner() {
         setIsScanning(true);
         setDetectedArea(null);
         setScanProgress(0);
+        setIsLocked(false);
     };
 
     // Simulated Area Accumulation (Dynamic Scan)
     useEffect(() => {
         let interval: any;
-        if (isDetecting && isScanning) {
+        if (isDetecting && isScanning && !isLocked) {
             interval = setInterval(() => {
-                setDetectedArea(prev => Math.min((prev || 0) + Math.random() * 5, 250));
+                setDetectedArea(prev => {
+                    const next = (prev || 0) + (Math.random() * 5 + 2);
+                    return Math.min(next, 500);
+                });
                 setScanProgress(prev => Math.min(prev + 2, 100));
             }, 100);
         }
         return () => clearInterval(interval);
-    }, [isDetecting, isScanning]);
+    }, [isDetecting, isScanning, isLocked]);
 
     const handleLogout = async () => {
         await signOut();
@@ -240,49 +246,106 @@ export function ARScanner() {
                             )}
                             {!cameraError && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                                    <div className={`w-36 h-36 border-2 border-dashed rounded-3xl transition-all duration-500 flex items-center justify-center ${isDetecting ? 'border-emerald-400 scale-110' : 'border-white/30 scale-100'} ${detectedArea && !isDetecting ? 'opacity-0 scale-150' : 'opacity-100'}`}>
-                                        <div className={`w-3 h-3 rounded-full bg-white ${isDetecting ? 'animate-ping' : ''}`} />
+                                    {/* Targeting Reticle - Always visible in scanning mode */}
+                                    <div className={`w-32 h-32 border-2 border-dashed rounded-3xl transition-all duration-500 flex items-center justify-center
+                                        ${isDetecting ? 'border-emerald-400 scale-110 shadow-[0_0_20px_rgba(52,211,153,0.3)]' : 'border-white/30 scale-100'}
+                                        ${isLocked ? 'opacity-0 scale-150' : 'opacity-100'}`}>
+                                        <div className={`w-2 h-2 rounded-full bg-white ${isDetecting ? 'animate-ping' : ''}`} />
                                     </div>
-                                    {!detectedArea && (
-                                        <div className="mt-8 bg-black/50 backdrop-blur-md px-6 py-2 rounded-full border border-white/20">
-                                            <p className="text-sm font-bold text-white tracking-wide">{isDetecting ? 'MEASURING SURFACE...' : 'AIM AT STREET SURFACE'}</p>
-                                        </div>
-                                    )}
-                                    {!detectedArea && (
-                                        <div className="absolute bottom-8 left-0 right-0 px-8">
-                                            <button onMouseDown={() => setIsDetecting(true)} onMouseUp={() => setIsDetecting(false)} onTouchStart={() => setIsDetecting(true)} onTouchEnd={() => setIsDetecting(false)} className={`w-full py-5 rounded-2xl font-bold transition-all shadow-xl active:scale-95 text-lg ${isDetecting ? 'bg-emerald-500 text-white scale-105' : 'bg-white text-gray-900'}`}>
-                                                {isDetecting ? 'Scanning...' : '⏺ Hold to Sample Area'}
-                                            </button>
-                                            {isDetecting && (
-                                                <div className="mt-4 h-2 w-full bg-white/20 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-emerald-400 transition-all duration-100" style={{ width: `${scanProgress}%` }} />
+
+                                    {/* Status Text & Floating Area Indicator */}
+                                    {!isLocked && (
+                                        <div className="mt-8 flex flex-col items-center gap-4">
+                                            <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3">
+                                                <div className={`w-2 h-2 rounded-full ${isDetecting ? 'bg-emerald-400 animate-pulse' : 'bg-white'}`} />
+                                                <p className="text-[10px] font-black tracking-widest text-white uppercase">
+                                                    {isDetecting ? 'Measuring...' : 'Aim at Surface'}
+                                                </p>
+                                            </div>
+
+                                            {detectedArea && (
+                                                <div className="bg-emerald-500/90 text-white font-mono font-black px-4 py-1 rounded-lg text-lg animate-in zoom-in-50 shadow-lg">
+                                                    {Math.round(detectedArea)} m²
                                                 </div>
                                             )}
                                         </div>
                                     )}
-                                    {detectedArea !== null && !isDetecting && (
-                                        <div className="absolute inset-0">
-                                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(16,185,129,0.15)_100%)] animate-pulse" />
-                                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[90%]">
-                                                <div className="bg-gray-900/95 backdrop-blur-2xl border border-emerald-500/50 rounded-2xl p-5 shadow-2xl">
-                                                    <div className="flex justify-between items-center">
-                                                        <div className="text-left">
-                                                            <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest mb-1">Measured Catchment</p>
-                                                            <p className="text-3xl font-mono font-bold text-white">{Math.round(detectedArea)}m²</p>
+
+                                    {/* Scanning Controls */}
+                                    {!isLocked && (
+                                        <div className="absolute bottom-8 left-0 right-0 px-8 flex flex-col gap-3">
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onMouseDown={() => setIsDetecting(true)}
+                                                    onMouseUp={() => setIsDetecting(false)}
+                                                    onTouchStart={() => setIsDetecting(true)}
+                                                    onTouchEnd={() => setIsDetecting(false)}
+                                                    className={`flex-[2] py-5 rounded-2xl font-black transition-all shadow-2xl active:scale-95 text-xs uppercase tracking-widest
+                                                        ${isDetecting ? 'bg-emerald-500 text-white' : 'bg-white text-gray-900'}`}
+                                                >
+                                                    {isDetecting ? '⏺ Sampling...' : '⏺ Hold to Sample'}
+                                                </button>
+
+                                                {detectedArea && (
+                                                    <button
+                                                        onClick={() => setIsLocked(true)}
+                                                        className="flex-1 py-5 rounded-2xl bg-emerald-500 text-white font-black text-xs uppercase tracking-widest shadow-2xl border border-emerald-400/50"
+                                                    >
+                                                        Done
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {!detectedArea && (
+                                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter opacity-60">
+                                                    Keep button held to accumulate area
+                                                </p>
+                                            )}
+
+                                            {isDetecting && (
+                                                <div className="h-1.5 w-full bg-white/20 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-emerald-400 transition-all duration-100"
+                                                        style={{ width: `${scanProgress}%` }}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Final Result Card (Locked Mode) */}
+                                    {isLocked && (
+                                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(16,185,129,0.1)_100%)]">
+                                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[90%] animate-in slide-in-from-bottom-10">
+                                                <div className="bg-gray-900/95 backdrop-blur-2xl border border-emerald-500/50 rounded-2xl p-5 shadow-2xl text-left">
+                                                    <div className="flex justify-between items-center mb-4">
+                                                        <div>
+                                                            <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest mb-1">Measured Catchment</p>
+                                                            <div className="flex items-baseline gap-1">
+                                                                <p className="text-3xl font-mono font-black text-white">{Math.round(detectedArea || 0)}</p>
+                                                                <p className="text-xs font-bold text-gray-500 uppercase">sqm</p>
+                                                            </div>
                                                         </div>
                                                         <div className="text-right">
                                                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Peak Runoff</p>
-                                                            <p className="text-2xl font-mono text-cyan-400">{peakRunoff.toFixed(2)}L/s</p>
+                                                            <p className="text-2xl font-mono text-cyan-400 font-black">{peakRunoff.toFixed(2)}L/s</p>
                                                         </div>
                                                     </div>
-                                                    <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                                                            <span className="text-xs text-gray-300 font-medium">Surface: Impervious (0.9)</span>
-                                                        </div>
-                                                        {isPinnActive && <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-[10px] text-purple-300 border border-purple-500/30 font-bold tracking-tighter uppercase">⚡ AI-PINN</span>}
+
+                                                    <div className="pt-4 border-t border-white/10 flex items-center justify-between">
+                                                        <button
+                                                            onClick={() => setIsLocked(false)}
+                                                            className="flex items-center gap-2 text-gray-400 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors"
+                                                        >
+                                                            ➕ Resume Measurement
+                                                        </button>
+                                                        {isPinnActive && (
+                                                            <span className="px-2 py-0.5 rounded bg-purple-500/20 text-[9px] text-purple-300 border border-purple-500/30 font-black tracking-tighter uppercase">
+                                                                ⚡ AI-PINN
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                    {location && <p className="text-[10px] text-gray-500 mt-2 font-mono text-center opacity-60">LOC: {location.lat.toFixed(4)}, {location.lon.toFixed(4)}</p>}
+                                                    {location && <p className="text-[9px] text-gray-500 mt-2 font-mono text-center opacity-40">GPS: {location.lat.toFixed(4)}, {location.lon.toFixed(4)}</p>}
                                                 </div>
                                             </div>
                                         </div>
@@ -291,7 +354,7 @@ export function ARScanner() {
                             )}
                         </div>
 
-                        {detectedArea !== null && !isDetecting && (
+                        {detectedArea !== null && isLocked && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                                 <div className="grid grid-cols-2 gap-3 mb-6">
                                     <div className="bg-blue-900/40 rounded-2xl p-4 border border-blue-500/30">
@@ -338,7 +401,7 @@ export function ARScanner() {
 
                                 <div className="flex gap-3 mb-8">
                                     <button onClick={() => navigate('/save', { state: { fixes, detectedArea, rainfall, isPinnActive, peakRunoff, locationName } })} className="flex-1 py-5 rounded-2xl bg-gradient-to-tr from-emerald-600 to-cyan-500 font-black text-white shadow-xl hover:shadow-emerald-500/20 active:scale-[0.98] transition-all uppercase tracking-widest text-sm">💾 Save Project Portfolio</button>
-                                    <button onClick={() => { setIsScanning(false); setDetectedArea(null); setFixes([]); }} className="px-6 py-5 rounded-2xl bg-gray-800 text-gray-300 font-bold border border-white/10 hover:bg-gray-700 transition-all uppercase tracking-widest text-sm">🔄 Reset</button>
+                                    <button onClick={() => { setIsScanning(false); setDetectedArea(null); setFixes([]); setIsLocked(false); }} className="px-6 py-5 rounded-2xl bg-gray-800 text-gray-300 font-bold border border-white/10 hover:bg-gray-700 transition-all uppercase tracking-widest text-sm">🔄 Reset</button>
                                 </div>
                             </div>
                         )}
