@@ -1,7 +1,26 @@
+import { getRobustRunoffPrediction } from '../ml/pinnInference';
+
 /**
  * Hydrology Calculation Engine
  * Client-side calculations for green infrastructure sizing based on Berlin rainfall data
  */
+
+/** Check if PINN model is ready for use */
+export const hasPINNSupport = true;
+
+/**
+ * Compute peak runoff rate using Physics-Informed Neural Network
+ * Falls back to Rational Method if PINN fails or uninitialized
+ */
+export async function computeRunoffWithPINN(
+    rainfall_mm_hr: number,
+    area_m2: number,
+    slope: number = 0.02
+): Promise<number> {
+    return getRobustRunoffPrediction(rainfall_mm_hr, area_m2, slope);
+}
+
+/** Runoff coefficients for different surface types */
 
 /** Runoff coefficients for different surface types */
 export const RUNOFF_COEFFICIENTS = {

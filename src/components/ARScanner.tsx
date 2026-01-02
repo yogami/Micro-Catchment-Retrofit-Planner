@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { ModelPlacement } from './ModelPlacement';
 import { DemoOverlay, useDemoState } from './DemoOverlay';
 import { openMeteoClient } from '../services/openMeteoClient';
-import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, RUNOFF_COEFFICIENTS } from '../utils/hydrology';
+import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, RUNOFF_COEFFICIENTS, computeRunoffWithPINN } from '../utils/hydrology';
 import type { GreenFix } from '../utils/hydrology';
 
 // Import model-viewer
@@ -82,9 +82,37 @@ export function ARScanner() {
         ? calculateTotalReduction(fixes.map(f => ({ size: f.size, reductionRate: f.reductionRate })), detectedArea || 100)
         : 0;
 
-    const peakRunoff = detectedArea
-        ? computePeakRunoff(rainfall, detectedArea, RUNOFF_COEFFICIENTS.impervious)
-        : 0;
+    const [peakRunoff, setPeakRunoff] = useState(0);
+    const [isPinnActive, setIsPinnActive] = useState(false);
+
+    // Calculate runoff using PINN (or fallback)
+    useEffect(() => {
+        let mounted = true;
+        async function calcRunoff() {
+            if (detectedArea) {
+                // Try PINN first
+                try {
+                    const q = await computeRunoffWithPINN(rainfall, detectedArea);
+                    if (mounted) {
+                        setPeakRunoff(q);
+                        setIsPinnActive(true);
+                    }
+                } catch (e) {
+                    // Start Synchronous Fallback
+                    const q = computePeakRunoff(rainfall, detectedArea, RUNOFF_COEFFICIENTS.impervious);
+                    if (mounted) {
+                        setPeakRunoff(q);
+                        setIsPinnActive(false);
+                    }
+                }
+            } else {
+                setPeakRunoff(0);
+                setIsPinnActive(false);
+            }
+        }
+        calcRunoff();
+        return () => { mounted = false; };
+    }, [detectedArea, rainfall]);
 
     return (
         <div className="min-h-screen bg-gray-900 text-white">
@@ -209,6 +237,11 @@ export function ARScanner() {
                                             <div className="bg-black/70 rounded-lg px-4 py-2 text-center">
                                                 <p className="text-red-400 font-mono text-lg">{detectedArea}m² impervious</p>
                                                 <p className="text-xs text-gray-400">Peak runoff: {peakRunoff.toFixed(2)} L/s</p>
+                                                {isPinnActive && (
+                                                    <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-purple-500/20 border border-purple-500/40 text-[10px] text-purple-300 font-mono">
+                                                        ⚡ AI-Physics Optimized
+                                                    </span>
+                                                )}
                                                 {location && (
                                                     <p className="text-[10px] text-gray-500 mt-1 font-mono">
                                                         GPS: {location.lat.toFixed(4)}, {location.lon.toFixed(4)}

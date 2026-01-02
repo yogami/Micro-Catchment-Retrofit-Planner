@@ -30,8 +30,8 @@ const PARAM_RANGES = {
 };
 
 // Time discretization
-const TIME_STEPS = 20;  // 0 to 60 minutes
-const SPACE_STEPS = 10; // Along flow path
+const TIME_STEPS = 10;  // Reduced from 20
+const SPACE_STEPS = 5; // Reduced from 10
 
 /**
  * Generate uniform samples within a range
