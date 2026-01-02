@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { ModelPlacement } from './ModelPlacement';
 import { DemoOverlay, useDemoState } from './DemoOverlay';
+import { ValidationChart } from './ValidationChart';
 import { openMeteoClient } from '../services/openMeteoClient';
 import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, RUNOFF_COEFFICIENTS, computeRunoffWithPINN } from '../utils/hydrology';
 import type { GreenFix } from '../utils/hydrology';
@@ -351,6 +352,13 @@ export function ARScanner() {
                                                 </div>
                                             ))}
                                         </div>
+                                    </div>
+                                )}
+
+                                {/* HEC-RAS Validation Chart - Show for Fairfax demo */}
+                                {demoScenario === 'fairfax' && detectedArea && (
+                                    <div className="mb-6">
+                                        <ValidationChart appPrediction={peakRunoff} />
                                     </div>
                                 )}
 
