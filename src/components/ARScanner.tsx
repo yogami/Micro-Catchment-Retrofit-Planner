@@ -1,14 +1,15 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { ModelPlacement } from './ModelPlacement';
 import { DemoOverlay, useDemoState } from './DemoOverlay';
 import { ValidationChart } from './ValidationChart';
 import { openMeteoClient } from '../services/openMeteoClient';
-import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, computeRunoffWithPINN, computeWQv, getProfileForLocation, REGULATION_PROFILES } from '../utils/hydrology';
-import type { GreenFix, RegulationProfile } from '../utils/hydrology';
+import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, computeRunoffWithPINN, computeWQv } from '../utils/hydrology';
+import type { GreenFix } from '../utils/hydrology';
 import { useUnitStore } from '../store/useUnitStore';
 import { convertArea, convertRainfall, convertFlow, getAreaUnit, getRainUnit, getFlowUnit, convertDepth, convertVolume, getDepthUnit, getVolumeUnit } from '../utils/units';
+import { createStormwaterDiscoveryUseCase, type StormwaterParameters, type DiscoveryResult, type JurisdictionChain, STORMWATER_PROFILES } from '../lib/geo-regulatory';
 
 // Import model-viewer
 import '@google/model-viewer';
@@ -38,24 +39,41 @@ export function ARScanner() {
     const [isLocked, setIsLocked] = useState(false);
     const [intensityMode, setIntensityMode] = useState<'auto' | 'manual'>('auto');
     const [manualIntensity, setManualIntensity] = useState<number>(50); // Default 50mm/hr (~2 in/hr)
-    const [activeProfile, setActiveProfile] = useState<RegulationProfile>(REGULATION_PROFILES.DEFAULT);
+    const [activeProfile, setActiveProfile] = useState(STORMWATER_PROFILES[0]);
     const [sizingMode, setSizingMode] = useState<'rate' | 'volume'>('rate');
     const [manualDepth, setManualDepth] = useState<number>(30.48); // Default 1.2 inches (30.48mm)
+    const [discoveryStatus, setDiscoveryStatus] = useState<'idle' | 'discovering' | 'ready'>('idle');
+    const [jurisdictionChain, setJurisdictionChain] = useState<JurisdictionChain | null>(null);
+    const [discoveryResult, setDiscoveryResult] = useState<DiscoveryResult<StormwaterParameters> | null>(null);
 
-    // Handle Location -> Profile Sync
+    // Memoized discovery service
+    const discoveryUseCase = useMemo(() => createStormwaterDiscoveryUseCase(), []);
+
+    // Handle Location -> Profile Discovery (DDD Service)
     useEffect(() => {
         if (location) {
-            const profile = getProfileForLocation(location.lat, location.lon);
-            setActiveProfile(profile);
+            setDiscoveryStatus('discovering');
+            discoveryUseCase.execute<StormwaterParameters>({
+                latitude: location.lat,
+                longitude: location.lon,
+                domain: 'stormwater'
+            }).then(result => {
+                setActiveProfile(result.profile);
+                setJurisdictionChain(result.chain);
+                setDiscoveryResult(result);
+                setDiscoveryStatus('ready');
 
-            // Auto-sync units on first detection or scenario load
-            if (profile.id !== 'DEFAULT') {
-                setUnitSystem(profile.units);
-                setManualIntensity(profile.designIntensity_mm_hr);
-                setManualDepth(profile.designDepth_mm);
-            }
+                // Auto-sync units based on discovered profile
+                if (result.status !== 'default') {
+                    setUnitSystem(result.profile.parameters.units);
+                    setManualIntensity(result.profile.parameters.designIntensity_mm_hr);
+                    setManualDepth(result.profile.parameters.designDepth_mm);
+                }
+            }).catch(() => {
+                setDiscoveryStatus('ready');
+            });
         }
-    }, [location, setUnitSystem]);
+    }, [location, setUnitSystem, discoveryUseCase]);
 
     // Handle Demo Auto-Start
     useEffect(() => {
@@ -70,11 +88,18 @@ export function ARScanner() {
                 }
 
                 if (lat !== 0) {
-                    const profile = getProfileForLocation(lat, lon);
-                    setActiveProfile(profile);
-                    setUnitSystem(profile.units);
-                    setManualIntensity(profile.designIntensity_mm_hr);
-                    setManualDepth(profile.designDepth_mm);
+                    // Use discovery service for demo scenarios
+                    const result = await discoveryUseCase.execute<StormwaterParameters>({
+                        latitude: lat,
+                        longitude: lon,
+                        domain: 'stormwater'
+                    });
+                    setActiveProfile(result.profile);
+                    setJurisdictionChain(result.chain);
+                    setDiscoveryResult(result);
+                    setUnitSystem(result.profile.parameters.units);
+                    setManualIntensity(result.profile.parameters.designIntensity_mm_hr);
+                    setManualDepth(result.profile.parameters.designDepth_mm);
 
                     const storm = await openMeteoClient.getDesignStorm(lat, lon);
                     setRainfall(storm);
@@ -89,7 +114,7 @@ export function ARScanner() {
             }
             startDemo();
         }
-    }, [demoScenario, isScanning, setUnitSystem]);
+    }, [demoScenario, isScanning, setUnitSystem, discoveryUseCase]);
 
     // Detect location and fetch rainfall
     useEffect(() => {
@@ -132,7 +157,17 @@ export function ARScanner() {
             const currentRainfall = sizingMode === 'rate'
                 ? (intensityMode === 'auto' ? rainfall : manualIntensity)
                 : manualDepth;
-            const suggestedFixes = suggestGreenFixes(detectedArea, currentRainfall, sizingMode, activeProfile);
+            // Create compatible profile for suggestGreenFixes
+            const compatProfile = {
+                id: activeProfile.id as 'VA' | 'BE' | 'DEFAULT',
+                name: activeProfile.name,
+                description: activeProfile.description,
+                designDepth_mm: activeProfile.parameters.designDepth_mm,
+                designIntensity_mm_hr: activeProfile.parameters.designIntensity_mm_hr,
+                rvFormula: activeProfile.parameters.rvFormula,
+                units: activeProfile.parameters.units
+            };
+            const suggestedFixes = suggestGreenFixes(detectedArea, currentRainfall, sizingMode, compatProfile);
             setFixes(suggestedFixes);
         }
     }, [detectedArea, rainfall, sizingMode, intensityMode, manualIntensity, manualDepth, activeProfile]);
@@ -186,14 +221,14 @@ export function ARScanner() {
                     if (mounted) setPeakRunoff(q);
                     setIsPinnActive(true);
                 } catch (e) {
-                    const rv = activeProfile.rvFormula(100);
+                    const rv = activeProfile.parameters.rvFormula(100);
                     const q = computePeakRunoff(currentIntensity, detectedArea, rv);
                     if (mounted) setPeakRunoff(q);
                     setIsPinnActive(false);
                 }
 
                 // WQv (Volume)
-                const rv = activeProfile.rvFormula(100);
+                const rv = activeProfile.parameters.rvFormula(100);
                 const v = computeWQv(currentDepth, detectedArea, rv);
                 if (mounted) setWqv(v);
             } else {
@@ -204,7 +239,7 @@ export function ARScanner() {
         }
         calcHydrology();
         return () => { mounted = false; };
-    }, [detectedArea, rainfall, intensityMode, manualIntensity, manualDepth]);
+    }, [detectedArea, rainfall, intensityMode, manualIntensity, manualDepth, activeProfile]);
 
     // Handle real camera feed
     useEffect(() => {
@@ -539,7 +574,7 @@ export function ARScanner() {
                                                 📏 Volume-Based Compliance Mode
                                             </p>
                                             <span className="text-[8px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded font-bold">
-                                                {activeProfile.id} PROFILED
+                                                {discoveryStatus === 'discovering' ? '🛰️ DISCOVERING...' : `${activeProfile.jurisdictionCode} PROFILED`}
                                             </span>
                                         </div>
                                         <p className="text-[10px] text-gray-400 leading-tight mb-2">
@@ -547,12 +582,28 @@ export function ARScanner() {
                                             Target Depth: {convertDepth(manualDepth, unitSystem).toFixed(1)}{getDepthUnit(unitSystem)}.
                                             Total Storage Required: {Math.round(convertVolume(wqv, unitSystem))}{getVolumeUnit(unitSystem)}.
                                         </p>
-                                        <div className="pt-2 border-t border-purple-500/20">
+                                        {jurisdictionChain && (
+                                            <div className="pt-2 border-t border-purple-500/20">
+                                                <p className="text-[8px] text-purple-300/60 uppercase font-bold mb-1">
+                                                    📍 Jurisdiction Hierarchy:
+                                                </p>
+                                                <p className="text-[8px] text-gray-500 mb-1">
+                                                    {jurisdictionChain.hierarchy.map(j => j.name).join(' → ')}
+                                                </p>
+                                                {discoveryResult?.status === 'fallback' && (
+                                                    <p className="text-[8px] text-yellow-400 italic">
+                                                        ⚠️ Using {activeProfile.name} (no local profile found)
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+                                        <div className="pt-2 border-t border-purple-500/20 mt-2">
                                             <p className="text-[8px] text-purple-300/60 uppercase font-bold mb-1">Active Design Standard:</p>
                                             <p className="text-[9px] text-purple-200/80 italic">{activeProfile.name}</p>
                                         </div>
                                     </div>
                                 )}
+
 
                                 {intensityMode === 'manual' && (
                                     <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl animate-in fade-in zoom-in-95">

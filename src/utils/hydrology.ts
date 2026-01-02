@@ -37,6 +37,7 @@ export interface RegulationProfile {
     designIntensity_mm_hr: number;
     rvFormula: (imperviousPercent: number) => number;
     units: 'imperial' | 'metric';
+    authorityUrl?: string;
 }
 
 export const REGULATION_PROFILES: Record<string, RegulationProfile> = {
@@ -44,25 +45,57 @@ export const REGULATION_PROFILES: Record<string, RegulationProfile> = {
         id: 'VA',
         name: 'Virginia Stormwater Handbook (9VAC25-870)',
         description: 'US EPA/Virginia DEQ standards for Northern Virginia.',
-        designDepth_mm: 25.4 * 1.2, // 1.2 inches standard for high-performance BMPs
-        designIntensity_mm_hr: 50.8, // ~2 in/hr (10-yr Atlas 14 baseline)
-        rvFormula: (i) => 0.05 + (0.009 * i), // Virginia Rv = 0.05 + 0.009(I)
-        units: 'imperial'
+        designDepth_mm: 30.48, // 1.2 inches
+        designIntensity_mm_hr: 50.8,
+        rvFormula: (i) => 0.05 + (0.009 * i),
+        units: 'imperial',
+        authorityUrl: 'https://www.deq.virginia.gov/'
+    },
+    NYC: {
+        id: 'VA', // Shared ID space for mapping
+        name: 'NYC Unified Stormwater Rule (USWR)',
+        description: 'NYC DEP 90th percentile retention standard.',
+        designDepth_mm: 38.1, // 1.5 inches
+        designIntensity_mm_hr: 45.0,
+        rvFormula: (i) => 0.05 + (0.009 * i),
+        units: 'imperial',
+        authorityUrl: 'https://www1.nyc.gov/site/dep/index.page'
+    },
+    CA: {
+        id: 'VA',
+        name: 'California LID Standards (CASQA)',
+        description: 'California 85th percentile storm event capture.',
+        designDepth_mm: 19.05, // 0.75 inches
+        designIntensity_mm_hr: 40.0,
+        rvFormula: (_i) => 0.9,
+        units: 'imperial',
+        authorityUrl: 'https://www.casqa.org/'
+    },
+    LDN: {
+        id: 'BE',
+        name: 'London SuDS Design Guide',
+        description: 'Greater London Authority 25mm first flush capture.',
+        designDepth_mm: 25.0,
+        designIntensity_mm_hr: 50.0,
+        rvFormula: () => 0.9,
+        units: 'metric',
+        authorityUrl: 'https://www.london.gov.uk/'
     },
     BE: {
         id: 'BE',
         name: 'Berliner Regenwasseragentur (Schwammstadt)',
         description: 'German DWA-A 138 / Sponge City Berlin guidelines.',
-        designDepth_mm: 30.0, // Berlin target for onsite retention
-        designIntensity_mm_hr: 45.0, // Typical central European 10-yr event
-        rvFormula: () => 0.9, // Fixed high-density urban coefficient
-        units: 'metric'
+        designDepth_mm: 30.0,
+        designIntensity_mm_hr: 45.0,
+        rvFormula: () => 0.9,
+        units: 'metric',
+        authorityUrl: 'https://regenwasseragentur.berlin/'
     },
     DEFAULT: {
         id: 'DEFAULT',
-        name: 'Standard EPA / Global Baseline',
-        description: 'Generalized rational method baseline.',
-        designDepth_mm: 25.4, // 1 inch
+        name: 'WHO/EPA Global Baseline',
+        description: 'Generalized 25mm / 1-inch target for regions without local handbooks.',
+        designDepth_mm: 25.4,
         designIntensity_mm_hr: 50.0,
         rvFormula: () => 0.9,
         units: 'metric'
@@ -70,17 +103,24 @@ export const REGULATION_PROFILES: Record<string, RegulationProfile> = {
 };
 
 /**
- * Geographic lookup for regulation profile
+ * Geographic lookup for regulation profile with expanded global regions
  */
 export function getProfileForLocation(lat: number, lon: number): RegulationProfile {
-    // Basic bounding box check for Virginia (approximate)
-    if (lat > 36.5 && lat < 39.5 && lon > -83.5 && lon < -75.5) {
-        return REGULATION_PROFILES.VA;
-    }
-    // Basic bounding box for Berlin/Brandenburg
-    if (lat > 52.3 && lat < 52.7 && lon > 13.0 && lon < 13.7) {
-        return REGULATION_PROFILES.BE;
-    }
+    // US East Coast (VA/DC/MD)
+    if (lat > 37.0 && lat < 40.0 && lon > -78.0 && lon < -75.0) return REGULATION_PROFILES.VA;
+
+    // New York City
+    if (lat > 40.5 && lat < 41.0 && lon > -74.3 && lon < -73.7) return REGULATION_PROFILES.NYC;
+
+    // London
+    if (lat > 51.3 && lat < 51.7 && lon > -0.5 && lon < 0.3) return REGULATION_PROFILES.LDN;
+
+    // California (SoCal/Bay Area focus)
+    if ((lat > 32.5 && lat < 38.0) && (lon > -124.5 && lon < -116.0)) return REGULATION_PROFILES.CA;
+
+    // Berlin
+    if (lat > 52.3 && lat < 52.7 && lon > 13.0 && lon < 13.7) return REGULATION_PROFILES.BE;
+
     return REGULATION_PROFILES.DEFAULT;
 }
 export type SurfaceType = keyof typeof RUNOFF_COEFFICIENTS;
