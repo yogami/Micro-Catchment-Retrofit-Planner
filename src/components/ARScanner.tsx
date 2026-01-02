@@ -26,7 +26,7 @@ export function ARScanner() {
     const [fixes, setFixes] = useState<GreenFix[]>([]);
     const [showAR, setShowAR] = useState(false);
     const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
-    const [locationName, setLocationName] = useState<string>('Berlin');
+    const [locationName, setLocationName] = useState<string>('Current Project');
     const { showDemo, completeDemo, skipDemo } = useDemoState();
     const videoRef = useRef<HTMLVideoElement>(null);
     const [cameraError, setCameraError] = useState<string | null>(null);
@@ -60,15 +60,15 @@ export function ARScanner() {
             }
             startDemo();
         }
-    }, [demoScenario]);
+    }, [demoScenario, isScanning]);
 
     // Detect location and fetch rainfall
     useEffect(() => {
-        if (demoScenario) return; // Skip if demo is active
+        if (demoScenario) return;
 
         async function init() {
             setIsLoadingRainfall(true);
-            let lat = 52.52; // Default Berlin
+            let lat = 52.52;
             let lon = 13.405;
 
             if ("geolocation" in navigator) {
@@ -95,7 +95,7 @@ export function ARScanner() {
             }
         }
         init();
-    }, []);
+    }, [demoScenario]);
 
     // Calculate fixes when area is detected
     useEffect(() => {
@@ -246,25 +246,30 @@ export function ARScanner() {
                             )}
                             {!cameraError && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                                    {/* Targeting Reticle - Always visible in scanning mode */}
+                                    {/* Targeting Reticle */}
                                     <div className={`w-32 h-32 border-2 border-dashed rounded-3xl transition-all duration-500 flex items-center justify-center
                                         ${isDetecting ? 'border-emerald-400 scale-110 shadow-[0_0_20px_rgba(52,211,153,0.3)]' : 'border-white/30 scale-100'}
                                         ${isLocked ? 'opacity-0 scale-150' : 'opacity-100'}`}>
                                         <div className={`w-2 h-2 rounded-full bg-white ${isDetecting ? 'animate-ping' : ''}`} />
                                     </div>
 
-                                    {/* Status Text & Floating Area Indicator */}
+                                    {/* Status Indicator */}
                                     {!isLocked && (
                                         <div className="mt-8 flex flex-col items-center gap-4">
-                                            <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3">
-                                                <div className={`w-2 h-2 rounded-full ${isDetecting ? 'bg-emerald-400 animate-pulse' : 'bg-white'}`} />
-                                                <p className="text-[10px] font-black tracking-widest text-white uppercase">
-                                                    {isDetecting ? 'Measuring...' : 'Aim at Surface'}
+                                            <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex flex-col items-center gap-1">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-2 h-2 rounded-full ${isDetecting ? 'bg-emerald-400 animate-pulse' : 'bg-white'}`} />
+                                                    <p className="text-[10px] font-black tracking-widest text-white uppercase">
+                                                        {isDetecting ? 'Analyzing Surface...' : 'Identify Impervious Area'}
+                                                    </p>
+                                                </div>
+                                                <p className="text-[8px] text-gray-400 uppercase font-bold tracking-tight">
+                                                    {isDetecting ? 'Calculating Runoff Potential (C=0.9)' : 'Estimated for asphalt/concrete'}
                                                 </p>
                                             </div>
 
                                             {detectedArea && (
-                                                <div className="bg-emerald-500/90 text-white font-mono font-black px-4 py-1 rounded-lg text-lg animate-in zoom-in-50 shadow-lg">
+                                                <div className="bg-emerald-500/90 text-white font-mono font-black px-4 py-1 rounded-lg text-lg animate-in zoom-in-50 shadow-lg border border-emerald-400/50">
                                                     {Math.round(detectedArea)} m²
                                                 </div>
                                             )}
@@ -281,9 +286,9 @@ export function ARScanner() {
                                                     onTouchStart={() => setIsDetecting(true)}
                                                     onTouchEnd={() => setIsDetecting(false)}
                                                     className={`flex-[2] py-5 rounded-2xl font-black transition-all shadow-2xl active:scale-95 text-xs uppercase tracking-widest
-                                                        ${isDetecting ? 'bg-emerald-500 text-white' : 'bg-white text-gray-900'}`}
+                                                        ${isDetecting ? 'bg-emerald-500 text-white' : 'bg-white text-gray-900 font-bold'}`}
                                                 >
-                                                    {isDetecting ? '⏺ Sampling...' : '⏺ Hold to Sample'}
+                                                    {isDetecting ? '⏺ Sampling Asphalt...' : '⏺ Mark Catchment'}
                                                 </button>
 
                                                 {detectedArea && (
@@ -297,8 +302,8 @@ export function ARScanner() {
                                             </div>
 
                                             {!detectedArea && (
-                                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter opacity-60">
-                                                    Keep button held to accumulate area
+                                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight opacity-60">
+                                                    Hold to map surface as high-runoff catchment
                                                 </p>
                                             )}
 
@@ -320,14 +325,14 @@ export function ARScanner() {
                                                 <div className="bg-gray-900/95 backdrop-blur-2xl border border-emerald-500/50 rounded-2xl p-5 shadow-2xl text-left">
                                                     <div className="flex justify-between items-center mb-4">
                                                         <div>
-                                                            <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest mb-1">Measured Catchment</p>
+                                                            <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest mb-1">Total Catchment Area</p>
                                                             <div className="flex items-baseline gap-1">
                                                                 <p className="text-3xl font-mono font-black text-white">{Math.round(detectedArea || 0)}</p>
                                                                 <p className="text-xs font-bold text-gray-500 uppercase">sqm</p>
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
-                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Peak Runoff</p>
+                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Peak Site Runoff</p>
                                                             <p className="text-2xl font-mono text-cyan-400 font-black">{peakRunoff.toFixed(2)}L/s</p>
                                                         </div>
                                                     </div>
@@ -337,15 +342,19 @@ export function ARScanner() {
                                                             onClick={() => setIsLocked(false)}
                                                             className="flex items-center gap-2 text-gray-400 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors"
                                                         >
-                                                            ➕ Resume Measurement
+                                                            ➕ Resume Mapping
                                                         </button>
                                                         {isPinnActive && (
                                                             <span className="px-2 py-0.5 rounded bg-purple-500/20 text-[9px] text-purple-300 border border-purple-500/30 font-black tracking-tighter uppercase">
-                                                                ⚡ AI-PINN
+                                                                ⚡ AI-PINN Powered
                                                             </span>
                                                         )}
                                                     </div>
-                                                    {location && <p className="text-[9px] text-gray-500 mt-2 font-mono text-center opacity-40">GPS: {location.lat.toFixed(4)}, {location.lon.toFixed(4)}</p>}
+                                                    {location && (
+                                                        <p className="text-[9px] text-gray-500 mt-2 font-mono text-center opacity-40 uppercase tracking-widest">
+                                                            GEO: {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -368,16 +377,16 @@ export function ARScanner() {
                                 </div>
 
                                 <div className="flex gap-2 mb-4 bg-gray-800 p-1 rounded-xl">
-                                    <button onClick={() => setShowAR(false)} className={`flex-1 py-2.5 rounded-lg font-bold text-xs transition-all ${!showAR ? 'bg-gray-700 text-white shadow-inner' : 'text-gray-400 hover:text-gray-300'}`}>📋 SUGGESTIONS</button>
-                                    <button onClick={() => setShowAR(true)} className={`flex-1 py-2.5 rounded-lg font-bold text-xs transition-all ${showAR ? 'bg-gray-700 text-white shadow-inner' : 'text-gray-400 hover:text-gray-300'}`}>📱 3D PREVIEW</button>
+                                    <button onClick={() => setShowAR(false)} className={`flex-1 py-2.5 rounded-lg font-bold text-xs transition-all ${!showAR ? 'bg-gray-700 text-white' : 'text-gray-400'}`}>📋 SUGGESTIONS</button>
+                                    <button onClick={() => setShowAR(true)} className={`flex-1 py-2.5 rounded-lg font-bold text-xs transition-all ${showAR ? 'bg-gray-700 text-white' : 'text-gray-400'}`}>📱 3D PREVIEW</button>
                                 </div>
 
                                 {showAR ? <ModelPlacement fixes={fixes} /> : (
                                     <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-5 mb-6 border border-white/5">
-                                        <h3 className="font-bold mb-4 flex items-center gap-2 text-xs text-gray-400 uppercase tracking-widest">Proposed Retrofit Interventions</h3>
+                                        <h3 className="font-bold mb-4 flex items-center gap-2 text-xs text-gray-400 uppercase tracking-widest">Hydrology Mitigation Strategy</h3>
                                         <div className="space-y-3">
                                             {fixes.map((fix, i) => (
-                                                <div key={i} className="flex items-center justify-between bg-gray-900/40 rounded-2xl p-4 border border-white/5 hover:border-emerald-500/30 transition-colors">
+                                                <div key={i} className="flex items-center justify-between bg-gray-900/40 rounded-2xl p-4 border border-white/5">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-2xl">
                                                             {fix.type === 'rain_garden' ? '🌿' : fix.type === 'permeable_pavement' ? '🧱' : '🌳'}
@@ -400,8 +409,8 @@ export function ARScanner() {
                                 {demoScenario === 'fairfax' && <div className="mb-6"><ValidationChart appPrediction={peakRunoff} /></div>}
 
                                 <div className="flex gap-3 mb-8">
-                                    <button onClick={() => navigate('/save', { state: { fixes, detectedArea, rainfall, isPinnActive, peakRunoff, locationName } })} className="flex-1 py-5 rounded-2xl bg-gradient-to-tr from-emerald-600 to-cyan-500 font-black text-white shadow-xl hover:shadow-emerald-500/20 active:scale-[0.98] transition-all uppercase tracking-widest text-sm">💾 Save Project Portfolio</button>
-                                    <button onClick={() => { setIsScanning(false); setDetectedArea(null); setFixes([]); setIsLocked(false); }} className="px-6 py-5 rounded-2xl bg-gray-800 text-gray-300 font-bold border border-white/10 hover:bg-gray-700 transition-all uppercase tracking-widest text-sm">🔄 Reset</button>
+                                    <button onClick={() => navigate('/save', { state: { fixes, detectedArea, rainfall, isPinnActive, peakRunoff, locationName } })} className="flex-1 py-5 rounded-2xl bg-gradient-to-tr from-emerald-600 to-cyan-500 font-black text-white shadow-xl uppercase tracking-widest text-sm">💾 Save Project Portfolio</button>
+                                    <button onClick={() => { setIsScanning(false); setDetectedArea(null); setFixes([]); setIsLocked(false); }} className="px-6 py-5 rounded-2xl bg-gray-800 text-gray-300 font-bold border border-white/10 uppercase tracking-widest text-sm">🔄 Reset</button>
                                 </div>
                             </div>
                         )}
