@@ -1,5 +1,5 @@
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { ModelPlacement } from './ModelPlacement';
 import { DemoOverlay, useDemoState } from './DemoOverlay';
@@ -13,6 +13,11 @@ import '@google/model-viewer';
 export function ARScanner() {
     const { user, signOut } = useAuth();
     const navigate = useNavigate();
+    const locationState = useLocation();
+
+    // Import location state for demo
+    const demoScenario = locationState.state?.demoScenario;
+
     const [isScanning, setIsScanning] = useState(false);
     const [detectedArea, setDetectedArea] = useState<number | null>(null);
     const [rainfall, setRainfall] = useState<number>(50); // Default 50mm/hr
@@ -23,8 +28,37 @@ export function ARScanner() {
     const [locationName, setLocationName] = useState<string>('Berlin');
     const { showDemo, completeDemo, skipDemo } = useDemoState();
 
+    // Handle Demo Auto-Start
+    useEffect(() => {
+        if (demoScenario && !isScanning) {
+            async function startDemo() {
+                setIsLoadingRainfall(true);
+                if (demoScenario === 'fairfax') {
+                    const lat = 38.8462, lon = -77.3064; // Fairfax, VA
+                    const storm = await openMeteoClient.getDesignStorm(lat, lon);
+                    setRainfall(storm);
+                    setLocation({ lat, lon });
+                    setLocationName('Fairfax, VA');
+                    setDetectedArea(120);
+                } else if (demoScenario === 'berlin') {
+                    const lat = 52.52, lon = 13.405; // Berlin
+                    const storm = await openMeteoClient.getDesignStorm(lat, lon);
+                    setRainfall(storm);
+                    setLocation({ lat, lon });
+                    setLocationName('Berlin');
+                    setDetectedArea(80);
+                }
+                setIsLoadingRainfall(false);
+                setIsScanning(true);
+            }
+            startDemo();
+        }
+    }, [demoScenario]);
+
     // Detect location and fetch rainfall
     useEffect(() => {
+        if (demoScenario) return; // Skip if demo is active
+
         async function init() {
             setIsLoadingRainfall(true);
             let lat = 52.52; // Default Berlin
@@ -323,7 +357,16 @@ export function ARScanner() {
                                 {/* Action Buttons */}
                                 <div className="flex gap-3">
                                     <button
-                                        onClick={() => navigate('/save')}
+                                        onClick={() => navigate('/save', {
+                                            state: {
+                                                fixes,
+                                                detectedArea,
+                                                rainfall,
+                                                isPinnActive,
+                                                peakRunoff,
+                                                locationName
+                                            }
+                                        })}
                                         className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 
                               font-semibold shadow-lg transition-all hover:shadow-xl"
                                     >

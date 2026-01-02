@@ -8,7 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getRobustRunoffPrediction } from '../pinnInference';
+// import { getRobustRunoffPrediction } from '../../src/ml/pinnInference';
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-node'; // Use Node backend for script
 

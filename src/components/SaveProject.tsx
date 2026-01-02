@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { projectService } from '../services/projectService';
 import { suggestGreenFixes, calculateTotalReduction } from '../utils/hydrology';
 
@@ -8,12 +8,19 @@ export function SaveProject() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
+    const location = useLocation();
 
-    // Get suggested fixes for 100m² area
-    const fixes = suggestGreenFixes(100, 50);
+    // Get data from scanner state or fallback to defaults
+    const scannerState = location.state || {};
+    const fixes = scannerState.fixes || suggestGreenFixes(100, 50);
+    const totalArea = scannerState.detectedArea || 100;
+    const rainfall = scannerState.rainfall || 50;
+    const isPinnActive = scannerState.isPinnActive || false;
+    const peakRunoff = scannerState.peakRunoff || 0;
+
     const totalReduction = calculateTotalReduction(
-        fixes.map(f => ({ size: f.size, reductionRate: f.reductionRate })),
-        100
+        fixes.map((f: any) => ({ size: f.size, reductionRate: f.reductionRate })),
+        totalArea
     );
 
     const handleSubmit = async (e: FormEvent) => {
@@ -25,7 +32,7 @@ export function SaveProject() {
             street_name: streetName,
             screenshot: null, // Will be captured from AR in future
             features: fixes,
-            total_area: 100,
+            total_area: totalArea,
             total_reduction: totalReduction,
         });
 
@@ -63,8 +70,19 @@ export function SaveProject() {
                     {/* Simulated Screenshot */}
                     <div className="aspect-video bg-gray-800 relative">
                         <div className="absolute inset-4 rounded-xl bg-red-500/20 border border-red-500/50 
-                          flex items-center justify-center">
-                            <span className="text-red-400 font-mono">100m² detected</span>
+                          flex items-center justify-center text-center p-4">
+                            <div>
+                                <p className="text-red-400 font-mono text-lg">{totalArea}m² detected</p>
+                                <p className="text-xs text-gray-400 font-mono mt-1">Peak: {peakRunoff.toFixed(2)} L/s</p>
+                                {isPinnActive && (
+                                    <span className="inline-block mt-2 px-1.5 py-0.5 rounded bg-purple-500/20 border border-purple-500/40 text-[10px] text-purple-300 font-mono">
+                                        ⚡ AI-Physics Optimized
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        <div className="absolute top-2 right-2 bg-blue-500/80 rounded-lg px-2 py-1 text-[10px] text-white backdrop-blur">
+                            🌧️ {rainfall}mm/hr
                         </div>
                     </div>
 

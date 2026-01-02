@@ -6,7 +6,7 @@ export function LandingPage() {
     const [email, setEmail] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-    const { signInWithEmail, user } = useAuth();
+    const { signInWithEmail, user, signInAsDemo } = useAuth();
     const navigate = useNavigate();
 
     // Redirect if already logged in
@@ -29,6 +29,23 @@ export function LandingPage() {
         }
 
         setIsLoading(false);
+    };
+
+    const handleDemoFairfax = async () => {
+        setIsLoading(true);
+        if (signInAsDemo) {
+            await signInAsDemo();
+            // Pass state to scanner to auto-start scenario
+            navigate('/scanner', { state: { demoScenario: 'fairfax' } });
+        }
+    };
+
+    const handleDemoBerlin = async () => {
+        setIsLoading(true);
+        if (signInAsDemo) {
+            await signInAsDemo();
+            navigate('/scanner', { state: { demoScenario: 'berlin' } });
+        }
     };
 
     return (
@@ -110,6 +127,27 @@ export function LandingPage() {
                                     '🚀 Start Scan'
                                 )}
                             </button>
+                        </div>
+
+                        {/* Demo Access */}
+                        <div className="mt-4 pt-4 border-t border-white/20 text-center">
+                            <p className="text-xs text-cyan-200 mb-2">Or try instant demo:</p>
+                            <div className="flex gap-2 justify-center">
+                                <button
+                                    type="button"
+                                    onClick={handleDemoFairfax}
+                                    className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-medium hover:bg-emerald-500/30 transition"
+                                >
+                                    🗽 Fairfax
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleDemoBerlin}
+                                    className="px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-300 text-xs font-medium hover:bg-blue-500/30 transition"
+                                >
+                                    🥨 Berlin
+                                </button>
+                            </div>
                         </div>
 
                         {message && (

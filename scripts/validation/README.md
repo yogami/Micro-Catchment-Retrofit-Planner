@@ -13,7 +13,7 @@ This directory is used for Model Validation (Week 4).
 3. Place the CSV file in this directory (e.g., `fairfax_hec_ras.csv`).
 4. Run the validation script:
     ```bash
-    npx tsx src/ml/validation/compareHecRas.ts
+    npx tsx scripts/validation/compareHecRas.ts
     ```
 
 ## Validation Plan

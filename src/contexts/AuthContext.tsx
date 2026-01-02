@@ -8,6 +8,7 @@ interface AuthContextType {
     loading: boolean;
     signInWithEmail: (email: string) => Promise<{ error: Error | null }>;
     signOut: () => Promise<void>;
+    signInAsDemo: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -47,12 +48,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: error ? new Error(error.message) : null };
     };
 
+    const signInAsDemo = async () => {
+        // Create a fake demo user
+        const demoUser: User = {
+            id: 'demo-user-123',
+            aud: 'authenticated',
+            role: 'authenticated',
+            email: 'demo@example.com',
+            email_confirmed_at: new Date().toISOString(),
+            phone: '',
+            confirmed_at: new Date().toISOString(),
+            last_sign_in_at: new Date().toISOString(),
+            app_metadata: { provider: 'email', providers: ['email'] },
+            user_metadata: {},
+            identities: [],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        };
+        setUser(demoUser);
+        setSession({
+            access_token: 'demo-token',
+            token_type: 'bearer',
+            expires_in: 3600,
+            refresh_token: 'demo-refresh',
+            user: demoUser
+        });
+    };
+
     const signOut = async () => {
         await supabase.auth.signOut();
+        // Also clear local demo state
+        setUser(null);
+        setSession(null);
     };
 
     return (
-        <AuthContext.Provider value={{ session, user, loading, signInWithEmail, signOut }}>
+        <AuthContext.Provider value={{ session, user, loading, signInWithEmail, signOut, signInAsDemo }}>
             {children}
         </AuthContext.Provider>
     );
