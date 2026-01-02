@@ -36,6 +36,8 @@ export function ARScanner() {
     const [isDetecting, setIsDetecting] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
     const [isLocked, setIsLocked] = useState(false);
+    const [intensityMode, setIntensityMode] = useState<'auto' | 'manual'>('auto');
+    const [manualIntensity, setManualIntensity] = useState<number>(50); // Default 50mm/hr (~2 in/hr)
 
     // Handle Demo Auto-Start
     useEffect(() => {
@@ -146,15 +148,16 @@ export function ARScanner() {
     useEffect(() => {
         let mounted = true;
         async function calcRunoff() {
+            const currentIntensity = intensityMode === 'auto' ? rainfall : manualIntensity;
             if (detectedArea) {
                 try {
-                    const q = await computeRunoffWithPINN(rainfall, detectedArea);
+                    const q = await computeRunoffWithPINN(currentIntensity, detectedArea);
                     if (mounted) {
                         setPeakRunoff(q);
                         setIsPinnActive(true);
                     }
                 } catch (e) {
-                    const q = computePeakRunoff(rainfall, detectedArea, RUNOFF_COEFFICIENTS.impervious);
+                    const q = computePeakRunoff(currentIntensity, detectedArea, RUNOFF_COEFFICIENTS.impervious);
                     if (mounted) {
                         setPeakRunoff(q);
                         setIsPinnActive(false);
@@ -167,7 +170,7 @@ export function ARScanner() {
         }
         calcRunoff();
         return () => { mounted = false; };
-    }, [detectedArea, rainfall]);
+    }, [detectedArea, rainfall, intensityMode, manualIntensity]);
 
     // Handle real camera feed
     useEffect(() => {
@@ -375,9 +378,40 @@ export function ARScanner() {
                         {detectedArea !== null && isLocked && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                                 <div className="grid grid-cols-2 gap-3 mb-6">
-                                    <div className="bg-blue-900/40 rounded-2xl p-4 border border-blue-500/30">
-                                        <p className="text-blue-400 text-[10px] font-bold uppercase tracking-widest mb-1 opacity-80">Storm Intensity</p>
-                                        <p className="text-2xl font-bold text-white">{convertRainfall(rainfall, unitSystem).toFixed(2)}<span className="text-sm ml-1 font-normal text-blue-300/60">{getRainUnit(unitSystem)}</span></p>
+                                    <div
+                                        onClick={() => setIntensityMode(intensityMode === 'auto' ? 'manual' : 'auto')}
+                                        className={`rounded-2xl p-4 border transition-all cursor-pointer ${intensityMode === 'auto' ? 'bg-blue-900/40 border-blue-500/30' : 'bg-orange-900/40 border-orange-500/30 shadow-[0_0_15px_rgba(249,115,22,0.2)]'}`}
+                                    >
+                                        <div className="flex justify-between items-center mb-1">
+                                            <p className={`text-[10px] font-bold uppercase tracking-widest opacity-80 ${intensityMode === 'auto' ? 'text-blue-400' : 'text-orange-400'}`}>
+                                                Storm Intensity
+                                            </p>
+                                            <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-black ${intensityMode === 'auto' ? 'bg-blue-500/20 text-blue-300' : 'bg-orange-500/20 text-orange-300'}`}>
+                                                {intensityMode.toUpperCase()}
+                                            </span>
+                                        </div>
+                                        {intensityMode === 'auto' ? (
+                                            <p className="text-2xl font-bold text-white">{convertRainfall(rainfall, unitSystem).toFixed(2)}<span className="text-sm ml-1 font-normal text-blue-300/60">{getRainUnit(unitSystem)}</span></p>
+                                        ) : (
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={convertRainfall(manualIntensity, unitSystem).toFixed(2)}
+                                                    onChange={(e) => {
+                                                        const val = parseFloat(e.target.value);
+                                                        if (!isNaN(val)) {
+                                                            // Convert back to metric for internal storage
+                                                            const metricVal = unitSystem === 'imperial' ? val / 0.0393701 : val;
+                                                            setManualIntensity(metricVal);
+                                                        }
+                                                    }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="w-full bg-white/10 border border-orange-500/30 rounded px-2 py-0.5 text-xl font-bold text-white focus:outline-none focus:border-orange-500"
+                                                />
+                                                <span className="text-sm font-normal text-orange-300/60">{getRainUnit(unitSystem)}</span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="bg-emerald-900/40 rounded-2xl p-4 border border-emerald-500/30">
                                         <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-widest mb-1 opacity-80">Peak Reduction</p>
@@ -416,6 +450,18 @@ export function ARScanner() {
                                 )}
 
                                 {demoScenario === 'fairfax' && <div className="mb-6"><ValidationChart appPrediction={peakRunoff} /></div>}
+
+                                {intensityMode === 'manual' && (
+                                    <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl animate-in fade-in zoom-in-95">
+                                        <p className="text-orange-400 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2">
+                                            ⚠️ Engineering Overide Active
+                                        </p>
+                                        <p className="text-[10px] text-gray-400 leading-tight">
+                                            Calculations are normalized for a 10-year Atlas 14 storm event.
+                                            Current Intensity: {convertRainfall(manualIntensity, unitSystem).toFixed(2)}{getRainUnit(unitSystem)}.
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div className="flex gap-3 mb-8">
                                     <button onClick={() => navigate('/save', { state: { fixes, detectedArea, rainfall, isPinnActive, peakRunoff, locationName } })} className="flex-1 py-5 rounded-2xl bg-gradient-to-tr from-emerald-600 to-cyan-500 font-black text-white shadow-xl uppercase tracking-widest text-sm">💾 Save Project Portfolio</button>
