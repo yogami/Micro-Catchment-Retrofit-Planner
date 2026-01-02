@@ -7,6 +7,8 @@ import { ValidationChart } from './ValidationChart';
 import { openMeteoClient } from '../services/openMeteoClient';
 import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, RUNOFF_COEFFICIENTS, computeRunoffWithPINN } from '../utils/hydrology';
 import type { GreenFix } from '../utils/hydrology';
+import { useUnitStore } from '../store/useUnitStore';
+import { convertArea, convertRainfall, convertFlow, getAreaUnit, getRainUnit, getFlowUnit } from '../utils/units';
 
 // Import model-viewer
 import '@google/model-viewer';
@@ -15,6 +17,7 @@ export function ARScanner() {
     const { user, signOut } = useAuth();
     const navigate = useNavigate();
     const locationState = useLocation();
+    const { unitSystem, toggleUnitSystem } = useUnitStore();
 
     // Import location state for demo
     const demoScenario = locationState.state?.demoScenario;
@@ -209,6 +212,12 @@ export function ARScanner() {
                         <span className="font-semibold text-sm">Micro-Catchment</span>
                     </div>
                     <div className="flex items-center gap-3">
+                        <button
+                            onClick={toggleUnitSystem}
+                            className="px-2 py-1 rounded bg-gray-800 border border-gray-700 text-[10px] font-black uppercase tracking-widest text-emerald-400 hover:bg-gray-700 transition-colors"
+                        >
+                            {unitSystem === 'metric' ? 'UNIT: METRIC' : 'UNIT: US/IMP'}
+                        </button>
                         <span className="text-xs text-gray-400">{user?.email}</span>
                         <button onClick={handleLogout} className="text-xs text-gray-400 hover:text-white transition">Logout</button>
                     </div>
@@ -219,7 +228,7 @@ export function ARScanner() {
                 {!isScanning ? (
                     <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
                         <div className="mb-6 bg-blue-500/20 rounded-xl px-4 py-2 text-blue-300 text-sm">
-                            {isLoadingRainfall ? <span>Detecting location & rainfall...</span> : <span>🌧️ {locationName} design storm: {rainfall}mm/hr</span>}
+                            {isLoadingRainfall ? <span>Detecting location & rainfall...</span> : <span>🌧️ {locationName} design storm: {convertRainfall(rainfall, unitSystem).toFixed(2)}{getRainUnit(unitSystem)}</span>}
                         </div>
                         <div className="w-32 h-32 rounded-full bg-gradient-to-r from-red-500/20 to-orange-500/20 border-2 border-red-500/50 flex items-center justify-center mb-6 animate-pulse">
                             <svg className="w-16 h-16 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,7 +279,7 @@ export function ARScanner() {
 
                                             {detectedArea && (
                                                 <div className="bg-emerald-500/90 text-white font-mono font-black px-4 py-1 rounded-lg text-lg animate-in zoom-in-50 shadow-lg border border-emerald-400/50">
-                                                    {Math.round(detectedArea)} m²
+                                                    {Math.round(convertArea(detectedArea, unitSystem))} {getAreaUnit(unitSystem)}
                                                 </div>
                                             )}
                                         </div>
@@ -327,13 +336,13 @@ export function ARScanner() {
                                                         <div>
                                                             <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest mb-1">Total Catchment Area</p>
                                                             <div className="flex items-baseline gap-1">
-                                                                <p className="text-3xl font-mono font-black text-white">{Math.round(detectedArea || 0)}</p>
-                                                                <p className="text-xs font-bold text-gray-500 uppercase">sqm</p>
+                                                                <p className="text-3xl font-mono font-black text-white">{Math.round(convertArea(detectedArea || 0, unitSystem))}</p>
+                                                                <p className="text-xs font-bold text-gray-500 uppercase">{getAreaUnit(unitSystem)}</p>
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
                                                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Peak Site Runoff</p>
-                                                            <p className="text-2xl font-mono text-cyan-400 font-black">{peakRunoff.toFixed(2)}L/s</p>
+                                                            <p className="text-2xl font-mono text-cyan-400 font-black">{convertFlow(peakRunoff, unitSystem).toFixed(2)}{getFlowUnit(unitSystem)}</p>
                                                         </div>
                                                     </div>
 
@@ -368,7 +377,7 @@ export function ARScanner() {
                                 <div className="grid grid-cols-2 gap-3 mb-6">
                                     <div className="bg-blue-900/40 rounded-2xl p-4 border border-blue-500/30">
                                         <p className="text-blue-400 text-[10px] font-bold uppercase tracking-widest mb-1 opacity-80">Storm Intensity</p>
-                                        <p className="text-2xl font-bold text-white">{rainfall}<span className="text-sm ml-1 font-normal text-blue-300/60">mm/hr</span></p>
+                                        <p className="text-2xl font-bold text-white">{convertRainfall(rainfall, unitSystem).toFixed(2)}<span className="text-sm ml-1 font-normal text-blue-300/60">{getRainUnit(unitSystem)}</span></p>
                                     </div>
                                     <div className="bg-emerald-900/40 rounded-2xl p-4 border border-emerald-500/30">
                                         <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-widest mb-1 opacity-80">Peak Reduction</p>
@@ -397,7 +406,7 @@ export function ARScanner() {
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        <p className="font-mono text-sm font-bold text-white">{fix.size}m²</p>
+                                                        <p className="font-mono text-sm font-bold text-white">{Math.round(convertArea(fix.size, unitSystem))}{getAreaUnit(unitSystem)}</p>
                                                         <p className="text-[10px] text-emerald-400 font-bold">-{Math.round(fix.reductionRate * 100)}% RELIEF</p>
                                                     </div>
                                                 </div>
