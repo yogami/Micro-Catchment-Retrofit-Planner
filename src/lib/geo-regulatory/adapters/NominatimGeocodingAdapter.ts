@@ -88,14 +88,19 @@ export class NominatimGeocodingAdapter implements GeocodingPort {
         const hierarchy: Jurisdiction[] = [];
 
         // Build jurisdiction codes based on country
-        let runningCode = countryCode;
         const codeComponents: Record<string, string> = { country: countryCode };
 
-        // Process levels from most specific to broadest
-        for (const levelConfig of hierarchyConfig.levels) {
+        // Process levels from BROADEST to MOST SPECIFIC to ensure parent components (like state) are available
+        const levelsBroadestFirst = [...hierarchyConfig.levels].reverse();
+
+        for (const levelConfig of levelsBroadestFirst) {
             const fieldValue = address[levelConfig.addressField];
 
             if (fieldValue) {
+                // Store component first so it's available for buildJurisdictionCode if needed
+                // (though buildJurisdictionCode currently uses components.state, etc.)
+                codeComponents[levelConfig.type] = this.getCodeComponent(countryCode, levelConfig.type, fieldValue);
+
                 const jurisdictionCode = this.buildJurisdictionCode(
                     countryCode,
                     levelConfig.type,
@@ -109,20 +114,20 @@ export class NominatimGeocodingAdapter implements GeocodingPort {
                     jurisdictionCode,
                     { osmAdminLevel: levelConfig.osmLevel }
                 ));
-
-                // Store component for building child codes
-                codeComponents[levelConfig.type] = this.getCodeComponent(countryCode, levelConfig.type, fieldValue);
             }
         }
 
-        // Always add country at the end
-        hierarchy.push(createJurisdiction(
+        // Add country (broadest)
+        hierarchy.unshift(createJurisdiction(
             'country',
             countryName,
             countryCode
         ));
 
-        return createJurisdictionChain(countryName, countryCode, hierarchy);
+        // Final hierarchy should be MOST SPECIFIC to BROADEST
+        const specificFirstHierarchy = hierarchy.reverse();
+
+        return createJurisdictionChain(countryName, countryCode, specificFirstHierarchy);
     }
 
     private buildJurisdictionCode(

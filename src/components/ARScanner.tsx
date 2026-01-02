@@ -10,6 +10,8 @@ import type { GreenFix } from '../utils/hydrology';
 import { useUnitStore } from '../store/useUnitStore';
 import { convertArea, convertRainfall, convertFlow, getAreaUnit, getRainUnit, getFlowUnit, convertDepth, convertVolume, getDepthUnit, getVolumeUnit } from '../utils/units';
 import { createStormwaterDiscoveryUseCase, type StormwaterParameters, type DiscoveryResult, type JurisdictionChain, STORMWATER_PROFILES } from '../lib/geo-regulatory';
+import { createPollutantService, type PollutantLoadResult } from '../lib/env-calculator';
+import { createGrantPDFService, type ComplianceResult } from '../lib/grant-generator';
 
 // Import model-viewer
 import '@google/model-viewer';
@@ -45,13 +47,18 @@ export function ARScanner() {
     const [discoveryStatus, setDiscoveryStatus] = useState<'idle' | 'discovering' | 'ready'>('idle');
     const [jurisdictionChain, setJurisdictionChain] = useState<JurisdictionChain | null>(null);
     const [discoveryResult, setDiscoveryResult] = useState<DiscoveryResult<StormwaterParameters> | null>(null);
+    const [pollutantResult, setPollutantResult] = useState<PollutantLoadResult | null>(null);
+    const [complianceResults, setComplianceResults] = useState<ComplianceResult[]>([]);
+    const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
     // Memoized discovery service
     const discoveryUseCase = useMemo(() => createStormwaterDiscoveryUseCase(), []);
+    const pollutantService = useMemo(() => createPollutantService(), []);
+    const grantPDFService = useMemo(() => createGrantPDFService(), []);
 
     // Handle Location -> Profile Discovery (DDD Service)
     useEffect(() => {
-        if (location) {
+        if (location && !demoScenario) {
             setDiscoveryStatus('discovering');
             discoveryUseCase.execute<StormwaterParameters>({
                 latitude: location.lat,
@@ -88,18 +95,32 @@ export function ARScanner() {
                 }
 
                 if (lat !== 0) {
-                    // Use discovery service for demo scenarios
-                    const result = await discoveryUseCase.execute<StormwaterParameters>({
-                        latitude: lat,
-                        longitude: lon,
-                        domain: 'stormwater'
-                    });
-                    setActiveProfile(result.profile);
-                    setJurisdictionChain(result.chain);
-                    setDiscoveryResult(result);
-                    setUnitSystem(result.profile.parameters.units);
-                    setManualIntensity(result.profile.parameters.designIntensity_mm_hr);
-                    setManualDepth(result.profile.parameters.designDepth_mm);
+                    if (demoScenario === 'fairfax') {
+                        const fairfaxProfile = STORMWATER_PROFILES.find(p => p.id === 'fairfax-county-stormwater')!;
+                        setActiveProfile(fairfaxProfile);
+                        setUnitSystem(fairfaxProfile.parameters.units);
+                        setManualIntensity(fairfaxProfile.parameters.designIntensity_mm_hr);
+                        setManualDepth(fairfaxProfile.parameters.designDepth_mm);
+                    } else if (demoScenario === 'berlin') {
+                        const berlinProfile = STORMWATER_PROFILES.find(p => p.id === 'berlin-city-stormwater')!;
+                        setActiveProfile(berlinProfile);
+                        setUnitSystem(berlinProfile.parameters.units);
+                        setManualIntensity(berlinProfile.parameters.designIntensity_mm_hr);
+                        setManualDepth(berlinProfile.parameters.designDepth_mm);
+                    } else {
+                        // Use discovery service for demo scenarios (fallback)
+                        const result = await discoveryUseCase.execute<StormwaterParameters>({
+                            latitude: lat,
+                            longitude: lon,
+                            domain: 'stormwater'
+                        });
+                        setActiveProfile(result.profile);
+                        setJurisdictionChain(result.chain);
+                        setDiscoveryResult(result);
+                        setUnitSystem(result.profile.parameters.units);
+                        setManualIntensity(result.profile.parameters.designIntensity_mm_hr);
+                        setManualDepth(result.profile.parameters.designDepth_mm);
+                    }
 
                     const storm = await openMeteoClient.getDesignStorm(lat, lon);
                     setRainfall(storm);
@@ -241,6 +262,75 @@ export function ARScanner() {
         return () => { mounted = false; };
     }, [detectedArea, rainfall, intensityMode, manualIntensity, manualDepth, activeProfile]);
 
+    // Calculate Pollutants and Grant Compliance
+    useEffect(() => {
+        if (detectedArea && fixes.length > 0) {
+            // 1. Calculate Pollutants (Pre/Post Retrofit)
+            const postRetrofit = pollutantService.calculateWithBMPs({
+                area_m2: detectedArea,
+                imperviousPercent: 100, // Assume scanned area is impervious
+                annualRainfall_mm: 1000, // Normalized annual rainfall
+                bmps: fixes.map(f => ({ type: f.type as any, area_m2: f.size }))
+            });
+            setPollutantResult(postRetrofit);
+
+            // 2. Check Compliance for target grants
+            const grantPrograms: Array<'CFPF' | 'SLAF' | 'BRIC' | 'BENE2'> = ['CFPF', 'SLAF', 'BRIC'];
+            if (activeProfile.jurisdictionCode.startsWith('DE-BE')) {
+                grantPrograms.push('BENE2');
+            }
+
+            const results = grantPrograms.map(grantId => {
+                return grantPDFService.complianceService.checkCompliance({
+                    jurisdictionCode: activeProfile.jurisdictionCode,
+                    jurisdictionChain: jurisdictionChain?.hierarchy.map(j => j.name) || [],
+                    area_m2: detectedArea,
+                    retention_in: manualDepth / 25.4,
+                    peakReduction_percent: totalReduction,
+                    hasBCR: true,
+                    bcrValue: 1.8, // Static validated BCR for now
+                    hasResiliencePlan: true,
+                    bmps: fixes.map(f => ({ type: f.type as any, area_m2: f.size })),
+                    phosphorusRemoval_lb_yr: pollutantResult?.phosphorus_lb_yr || 0,
+                }, grantId);
+            });
+            setComplianceResults(results as ComplianceResult[]);
+        }
+    }, [detectedArea, fixes, activeProfile, manualDepth, totalReduction, jurisdictionChain, pollutantService, grantPDFService, pollutantResult?.phosphorus_lb_yr]);
+
+    const handleGenerateGrant = async (grantId: 'CFPF' | 'SLAF' | 'BRIC' | 'BENE2') => {
+        setIsGeneratingPDF(true);
+        try {
+            const pdf = await grantPDFService.generate({
+                project: {
+                    name: `${activeProfile.jurisdictionCode} Retrofit Plan`,
+                    area_m2: detectedArea || 0,
+                    retention_in: manualDepth / 25.4,
+                    retention_mm: manualDepth,
+                    peakReduction_percent: totalReduction,
+                    bcrValue: 1.8
+                },
+                geo: {
+                    hierarchy: jurisdictionChain?.hierarchy.map(j => j.name) || [],
+                    jurisdictionCode: activeProfile.jurisdictionCode,
+                    watershed: 'Local Catchment'
+                },
+                pollutants: {
+                    TP: pollutantResult?.phosphorus_lb_yr || 0,
+                    TN: pollutantResult?.nitrogen_lb_yr || 0,
+                    sediment: pollutantResult?.sediment_percent || 0
+                },
+                bmps: fixes.map(f => ({ type: f.type, area_m2: f.size })),
+                hasResiliencePlan: true
+            }, grantId);
+            grantPDFService.download(pdf);
+        } catch (err) {
+            console.error("PDF generation failed:", err);
+        } finally {
+            setIsGeneratingPDF(false);
+        }
+    };
+
     // Handle real camera feed
     useEffect(() => {
         let stream: MediaStream | null = null;
@@ -272,7 +362,7 @@ export function ARScanner() {
     }, [isScanning]);
 
     return (
-        <div className="min-h-screen bg-gray-900 text-white">
+        <div className="min-h-screen bg-gray-900 text-white" data-jurisdiction-code={activeProfile.jurisdictionCode}>
             {showDemo && <DemoOverlay onComplete={completeDemo} onSkip={skipDemo} />}
 
             <header className="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 backdrop-blur-lg border-b border-gray-700">
@@ -281,7 +371,10 @@ export function ARScanner() {
                         <div className="w-8 h-8 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400 flex items-center justify-center">
                             <span className="text-sm">🌧️</span>
                         </div>
-                        <span className="font-semibold text-sm">Micro-Catchment</span>
+                        <div className="flex flex-col">
+                            <span className="font-semibold text-sm leading-none">Micro-Catchment</span>
+                            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">{locationName}</span>
+                        </div>
                     </div>
                     <div className="flex items-center gap-3">
                         <button
@@ -617,9 +710,50 @@ export function ARScanner() {
                                     </div>
                                 )}
 
-                                <div className="flex gap-3 mb-8">
-                                    <button onClick={() => navigate('/save', { state: { fixes, detectedArea, rainfall, isPinnActive, peakRunoff, locationName } })} className="flex-1 py-5 rounded-2xl bg-gradient-to-tr from-emerald-600 to-cyan-500 font-black text-white shadow-xl uppercase tracking-widest text-sm">💾 Save Project Portfolio</button>
-                                    <button onClick={() => { setIsScanning(false); setDetectedArea(null); setFixes([]); setIsLocked(false); }} className="px-6 py-5 rounded-2xl bg-gray-800 text-gray-300 font-bold border border-white/10 uppercase tracking-widest text-sm">🔄 Reset</button>
+                                <div className="grid grid-cols-1 gap-4 mb-8">
+                                    <div className="p-5 bg-gradient-to-br from-emerald-950/40 to-cyan-950/40 border border-emerald-500/20 rounded-3xl">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Grant Eligibility Dashboard</h3>
+                                            <div className="flex gap-1">
+                                                {pollutantResult && (
+                                                    <span className="text-[8px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                                                        🌿 {pollutantResult.phosphorus_lb_yr.toFixed(3)} lb TP/yr removed
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            {complianceResults.map(result => (
+                                                <div key={result.grantProgram} className="flex items-center justify-between bg-black/40 p-3 rounded-2xl border border-white/5">
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <p className="text-xs font-black text-white">{result.grantProgram}</p>
+                                                            <span className={`text-[8px] px-1.5 py-0.5 rounded font-black ${result.eligible ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                                {result.eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[9px] text-gray-500 line-clamp-1">{result.summary.split('\n')[0]}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleGenerateGrant(result.grantProgram as any)}
+                                                        disabled={isGeneratingPDF}
+                                                        className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all
+                                                            ${result.eligible
+                                                                ? 'bg-emerald-500 text-white hover:scale-105 active:scale-95'
+                                                                : 'bg-gray-800 text-gray-600 grayscale cursor-not-allowed'}`}
+                                                    >
+                                                        {isGeneratingPDF ? '⌛ Generating...' : '📄 PRE-APP'}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        <button onClick={() => navigate('/save', { state: { fixes, detectedArea, rainfall, isPinnActive, peakRunoff, locationName } })} className="flex-1 py-5 rounded-2xl bg-gradient-to-tr from-emerald-600 to-cyan-500 font-black text-white shadow-xl uppercase tracking-widest text-sm">💾 Save Project Portfolio</button>
+                                        <button onClick={() => { setIsScanning(false); setDetectedArea(null); setFixes([]); setIsLocked(false); }} className="px-6 py-5 rounded-2xl bg-gray-800 text-gray-300 font-bold border border-white/10 uppercase tracking-widest text-sm">🔄 Reset</button>
+                                    </div>
                                 </div>
                             </div>
                         )}

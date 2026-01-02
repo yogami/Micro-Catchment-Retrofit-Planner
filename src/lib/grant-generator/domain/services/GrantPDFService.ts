@@ -39,10 +39,11 @@ export interface GeneratedPDF {
     blob: Blob;
     filename: string;
     fields: Record<string, string>;
+    doc: jsPDF;
 }
 
 export class GrantPDFService {
-    private complianceService = new ComplianceCheckService();
+    public complianceService = new ComplianceCheckService();
 
     /**
      * Generate a grant pre-application PDF
@@ -88,7 +89,7 @@ export class GrantPDFService {
         const blob = pdf.output('blob');
         const filename = `${grantId.toLowerCase()}_preapplication_${Date.now()}.pdf`;
 
-        return { blob, filename, fields };
+        return { blob, filename, fields, doc: pdf };
     }
 
     private buildFieldValues(
@@ -273,13 +274,6 @@ export class GrantPDFService {
      * Download PDF directly in browser
      */
     download(pdf: GeneratedPDF): void {
-        const url = URL.createObjectURL(pdf.blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = pdf.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        pdf.doc.save(pdf.filename);
     }
 }
