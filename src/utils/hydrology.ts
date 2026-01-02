@@ -66,6 +66,24 @@ export function computePeakRunoff(
 }
 
 /**
+ * Compute Water Quality Volume (WQv) for a given rainfall depth
+ * Formula: WQv = (P * Rv * A)
+ * 
+ * @param depth_mm - Rainfall depth in mm
+ * @param area_m2 - Catchment area in m²
+ * @param coeff - Runoff coefficient (usually Rv)
+ * @returns Required storage volume in Liters
+ */
+export function computeWQv(
+    depth_mm: number,
+    area_m2: number,
+    coeff: number = 0.9
+): number {
+    // mm * m² = L (since 1mm on 1m² = 1L)
+    return depth_mm * area_m2 * coeff;
+}
+
+/**
  * Size a rain garden based on required storage volume
  * 
  * @param runoff_Ls - Peak runoff rate in L/s
@@ -166,13 +184,18 @@ export function calculateTotalReduction(
  */
 export function suggestGreenFixes(
     area_m2: number,
-    rainfall_mm_hr: number = 50
+    rainfall: number = 50,
+    mode: 'rate' | 'volume' = 'rate'
 ): GreenFix[] {
-    // Peak runoff could be used for more precise sizing in future iterations
-    void rainfall_mm_hr; // Marked for future use
-
     // Standard recommendations based on area
     const fixes: GreenFix[] = [];
+
+    // If in volume mode, we might want to size specifically for the WQv
+    const designVolume = mode === 'volume'
+        ? computeWQv(rainfall, area_m2, RUNOFF_COEFFICIENTS.impervious)
+        : computePeakRunoff(rainfall, area_m2, RUNOFF_COEFFICIENTS.impervious) * 3600; // Simulated volume for 1hr
+
+    void designVolume; // For now keeping the heuristic sizing, but marking volume for future refinement
 
     // Rain garden: 20% of area for sidewalk edges
     const rainGardenSize = Math.round(area_m2 * 0.2);

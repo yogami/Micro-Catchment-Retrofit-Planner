@@ -5,10 +5,10 @@ import { ModelPlacement } from './ModelPlacement';
 import { DemoOverlay, useDemoState } from './DemoOverlay';
 import { ValidationChart } from './ValidationChart';
 import { openMeteoClient } from '../services/openMeteoClient';
-import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, RUNOFF_COEFFICIENTS, computeRunoffWithPINN } from '../utils/hydrology';
+import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, RUNOFF_COEFFICIENTS, computeRunoffWithPINN, computeWQv } from '../utils/hydrology';
 import type { GreenFix } from '../utils/hydrology';
 import { useUnitStore } from '../store/useUnitStore';
-import { convertArea, convertRainfall, convertFlow, getAreaUnit, getRainUnit, getFlowUnit } from '../utils/units';
+import { convertArea, convertRainfall, convertFlow, getAreaUnit, getRainUnit, getFlowUnit, convertDepth, convertVolume, getDepthUnit, getVolumeUnit } from '../utils/units';
 
 // Import model-viewer
 import '@google/model-viewer';
@@ -38,6 +38,8 @@ export function ARScanner() {
     const [isLocked, setIsLocked] = useState(false);
     const [intensityMode, setIntensityMode] = useState<'auto' | 'manual'>('auto');
     const [manualIntensity, setManualIntensity] = useState<number>(50); // Default 50mm/hr (~2 in/hr)
+    const [sizingMode, setSizingMode] = useState<'rate' | 'volume'>('rate');
+    const [manualDepth, setManualDepth] = useState<number>(30.48); // Default 1.2 inches (30.48mm)
 
     // Handle Demo Auto-Start
     useEffect(() => {
@@ -105,10 +107,13 @@ export function ARScanner() {
     // Calculate fixes when area is detected
     useEffect(() => {
         if (detectedArea) {
-            const suggestedFixes = suggestGreenFixes(detectedArea, rainfall);
+            const currentRainfall = sizingMode === 'rate'
+                ? (intensityMode === 'auto' ? rainfall : manualIntensity)
+                : manualDepth;
+            const suggestedFixes = suggestGreenFixes(detectedArea, currentRainfall, sizingMode);
             setFixes(suggestedFixes);
         }
-    }, [detectedArea, rainfall]);
+    }, [detectedArea, rainfall, sizingMode, intensityMode, manualIntensity, manualDepth]);
 
     const handleStartScan = () => {
         setIsScanning(true);
@@ -142,35 +147,40 @@ export function ARScanner() {
         : 0;
 
     const [peakRunoff, setPeakRunoff] = useState(0);
+    const [wqv, setWqv] = useState(0);
     const [isPinnActive, setIsPinnActive] = useState(false);
 
-    // Calculate runoff using PINN (or fallback)
+    // Calculate runoff and WQv
     useEffect(() => {
         let mounted = true;
-        async function calcRunoff() {
+        async function calcHydrology() {
             const currentIntensity = intensityMode === 'auto' ? rainfall : manualIntensity;
+            const currentDepth = manualDepth;
+
             if (detectedArea) {
+                // Peak Runoff (Rate)
                 try {
                     const q = await computeRunoffWithPINN(currentIntensity, detectedArea);
-                    if (mounted) {
-                        setPeakRunoff(q);
-                        setIsPinnActive(true);
-                    }
+                    if (mounted) setPeakRunoff(q);
+                    setIsPinnActive(true);
                 } catch (e) {
                     const q = computePeakRunoff(currentIntensity, detectedArea, RUNOFF_COEFFICIENTS.impervious);
-                    if (mounted) {
-                        setPeakRunoff(q);
-                        setIsPinnActive(false);
-                    }
+                    if (mounted) setPeakRunoff(q);
+                    setIsPinnActive(false);
                 }
+
+                // WQv (Volume)
+                const v = computeWQv(currentDepth, detectedArea, RUNOFF_COEFFICIENTS.impervious);
+                if (mounted) setWqv(v);
             } else {
                 setPeakRunoff(0);
+                setWqv(0);
                 setIsPinnActive(false);
             }
         }
-        calcRunoff();
+        calcHydrology();
         return () => { mounted = false; };
-    }, [detectedArea, rainfall, intensityMode, manualIntensity]);
+    }, [detectedArea, rainfall, intensityMode, manualIntensity, manualDepth]);
 
     // Handle real camera feed
     useEffect(() => {
@@ -344,8 +354,14 @@ export function ARScanner() {
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
-                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Peak Site Runoff</p>
-                                                            <p className="text-2xl font-mono text-cyan-400 font-black">{convertFlow(peakRunoff, unitSystem).toFixed(2)}{getFlowUnit(unitSystem)}</p>
+                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">
+                                                                {sizingMode === 'rate' ? 'Peak Site Runoff' : 'Capture Volume (WQv)'}
+                                                            </p>
+                                                            <p className="text-2xl font-mono text-cyan-400 font-black">
+                                                                {sizingMode === 'rate'
+                                                                    ? `${convertFlow(peakRunoff, unitSystem).toFixed(2)}${getFlowUnit(unitSystem)}`
+                                                                    : `${Math.round(convertVolume(wqv, unitSystem))}${getVolumeUnit(unitSystem)}`}
+                                                            </p>
                                                         </div>
                                                     </div>
 
@@ -377,45 +393,86 @@ export function ARScanner() {
 
                         {detectedArea !== null && isLocked && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <div className="grid grid-cols-2 gap-3 mb-6">
-                                    <div
-                                        onClick={() => setIntensityMode(intensityMode === 'auto' ? 'manual' : 'auto')}
-                                        className={`rounded-2xl p-4 border transition-all cursor-pointer ${intensityMode === 'auto' ? 'bg-blue-900/40 border-blue-500/30' : 'bg-orange-900/40 border-orange-500/30 shadow-[0_0_15px_rgba(249,115,22,0.2)]'}`}
+                                <div className="flex gap-2 mb-4 bg-gray-950 p-1 rounded-xl border border-white/5">
+                                    <button
+                                        onClick={() => setSizingMode('rate')}
+                                        className={`flex-1 py-1.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all ${sizingMode === 'rate' ? 'bg-white text-gray-900' : 'text-gray-500 hover:text-white'}`}
                                     >
-                                        <div className="flex justify-between items-center mb-1">
-                                            <p className={`text-[10px] font-bold uppercase tracking-widest opacity-80 ${intensityMode === 'auto' ? 'text-blue-400' : 'text-orange-400'}`}>
-                                                Storm Intensity
-                                            </p>
-                                            <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-black ${intensityMode === 'auto' ? 'bg-blue-500/20 text-blue-300' : 'bg-orange-500/20 text-orange-300'}`}>
-                                                {intensityMode.toUpperCase()}
-                                            </span>
+                                        Rate-Based (Flow)
+                                    </button>
+                                    <button
+                                        onClick={() => setSizingMode('volume')}
+                                        className={`flex-1 py-1.5 rounded-lg font-black text-[9px] uppercase tracking-widest transition-all ${sizingMode === 'volume' ? 'bg-white text-gray-900' : 'text-gray-500 hover:text-white'}`}
+                                    >
+                                        Volume-Based (Depth)
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 mb-6">
+                                    {sizingMode === 'rate' ? (
+                                        <div
+                                            onClick={() => setIntensityMode(intensityMode === 'auto' ? 'manual' : 'auto')}
+                                            className={`rounded-2xl p-4 border transition-all cursor-pointer ${intensityMode === 'auto' ? 'bg-blue-900/40 border-blue-500/30' : 'bg-orange-900/40 border-orange-500/30 shadow-[0_0_15px_rgba(249,115,22,0.2)]'}`}
+                                        >
+                                            <div className="flex justify-between items-center mb-1">
+                                                <p className={`text-[10px] font-bold uppercase tracking-widest opacity-80 ${intensityMode === 'auto' ? 'text-blue-400' : 'text-orange-400'}`}>
+                                                    Storm Intensity
+                                                </p>
+                                                <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-black ${intensityMode === 'auto' ? 'bg-blue-500/20 text-blue-300' : 'bg-orange-500/20 text-orange-300'}`}>
+                                                    {intensityMode.toUpperCase()}
+                                                </span>
+                                            </div>
+                                            {intensityMode === 'auto' ? (
+                                                <p className="text-2xl font-bold text-white">{convertRainfall(rainfall, unitSystem).toFixed(2)}<span className="text-sm ml-1 font-normal text-blue-300/60">{getRainUnit(unitSystem)}</span></p>
+                                            ) : (
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={convertRainfall(manualIntensity, unitSystem).toFixed(2)}
+                                                        onChange={(e) => {
+                                                            const val = parseFloat(e.target.value);
+                                                            if (!isNaN(val)) {
+                                                                // Convert back to metric for internal storage
+                                                                const metricVal = unitSystem === 'imperial' ? val / 0.0393701 : val;
+                                                                setManualIntensity(metricVal);
+                                                            }
+                                                        }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="w-full bg-white/10 border border-orange-500/30 rounded px-2 py-0.5 text-xl font-bold text-white focus:outline-none focus:border-orange-500"
+                                                    />
+                                                    <span className="text-sm font-normal text-orange-300/60">{getRainUnit(unitSystem)}</span>
+                                                </div>
+                                            )}
                                         </div>
-                                        {intensityMode === 'auto' ? (
-                                            <p className="text-2xl font-bold text-white">{convertRainfall(rainfall, unitSystem).toFixed(2)}<span className="text-sm ml-1 font-normal text-blue-300/60">{getRainUnit(unitSystem)}</span></p>
-                                        ) : (
+                                    ) : (
+                                        <div className="bg-purple-900/40 rounded-2xl p-4 border border-purple-500/30">
+                                            <p className="text-purple-400 text-[10px] font-bold uppercase tracking-widest mb-1 opacity-80">Rainfall Depth</p>
                                             <div className="flex items-center gap-2">
                                                 <input
                                                     type="number"
-                                                    step="0.01"
-                                                    value={convertRainfall(manualIntensity, unitSystem).toFixed(2)}
+                                                    step="0.1"
+                                                    value={convertDepth(manualDepth, unitSystem).toFixed(1)}
                                                     onChange={(e) => {
                                                         const val = parseFloat(e.target.value);
                                                         if (!isNaN(val)) {
-                                                            // Convert back to metric for internal storage
                                                             const metricVal = unitSystem === 'imperial' ? val / 0.0393701 : val;
-                                                            setManualIntensity(metricVal);
+                                                            setManualDepth(metricVal);
                                                         }
                                                     }}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    className="w-full bg-white/10 border border-orange-500/30 rounded px-2 py-0.5 text-xl font-bold text-white focus:outline-none focus:border-orange-500"
+                                                    className="w-full bg-white/10 border border-purple-500/30 rounded px-2 py-0.5 text-xl font-bold text-white focus:outline-none focus:border-purple-500"
                                                 />
-                                                <span className="text-sm font-normal text-orange-300/60">{getRainUnit(unitSystem)}</span>
+                                                <span className="text-sm font-normal text-purple-300/60">{getDepthUnit(unitSystem)}</span>
                                             </div>
-                                        )}
-                                    </div>
+                                        </div>
+                                    )}
                                     <div className="bg-emerald-900/40 rounded-2xl p-4 border border-emerald-500/30">
-                                        <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-widest mb-1 opacity-80">Peak Reduction</p>
-                                        <p className="text-2xl font-bold text-emerald-400">{Math.round(totalReduction)}%</p>
+                                        <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-widest mb-1 opacity-80">
+                                            {sizingMode === 'rate' ? 'Peak Reduction' : 'WQv Performance'}
+                                        </p>
+                                        <p className="text-2xl font-bold text-emerald-400">
+                                            {sizingMode === 'rate' ? Math.round(totalReduction) : 100}%
+                                        </p>
                                     </div>
                                 </div>
 
@@ -450,6 +507,19 @@ export function ARScanner() {
                                 )}
 
                                 {demoScenario === 'fairfax' && <div className="mb-6"><ValidationChart appPrediction={peakRunoff} /></div>}
+
+                                {sizingMode === 'volume' && (
+                                    <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/30 rounded-2xl animate-in fade-in zoom-in-95">
+                                        <p className="text-purple-400 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2">
+                                            📏 Volume-Based Compliance Mode
+                                        </p>
+                                        <p className="text-[10px] text-gray-400 leading-tight">
+                                            Sizing based on Water Quality Volume (WQv).
+                                            Target Depth: {convertDepth(manualDepth, unitSystem).toFixed(1)}{getDepthUnit(unitSystem)}.
+                                            Total Storage Required: {Math.round(convertVolume(wqv, unitSystem))}{getVolumeUnit(unitSystem)}.
+                                        </p>
+                                    </div>
+                                )}
 
                                 {intensityMode === 'manual' && (
                                     <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl animate-in fade-in zoom-in-95">
