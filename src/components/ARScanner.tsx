@@ -1,6 +1,6 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ModelPlacement } from './ModelPlacement';
 import { DemoOverlay, useDemoState } from './DemoOverlay';
 import { ValidationChart } from './ValidationChart';
@@ -28,6 +28,8 @@ export function ARScanner() {
     const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
     const [locationName, setLocationName] = useState<string>('Berlin');
     const { showDemo, completeDemo, skipDemo } = useDemoState();
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const [cameraError, setCameraError] = useState<string | null>(null);
 
     // Handle Demo Auto-Start
     useEffect(() => {
@@ -149,6 +151,36 @@ export function ARScanner() {
         return () => { mounted = false; };
     }, [detectedArea, rainfall]);
 
+    // Handle real camera feed
+    useEffect(() => {
+        let stream: MediaStream | null = null;
+        async function startCamera() {
+            if (isScanning && videoRef.current) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'environment',
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
+                        }
+                    });
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                    }
+                } catch (err) {
+                    console.error("Camera access failed:", err);
+                    setCameraError("Camera access denied or unavailable.");
+                }
+            }
+        }
+        startCamera();
+        return () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, [isScanning]);
+
     return (
         <div className="min-h-screen bg-gray-900 text-white">
             {/* Demo Overlay for first-time users */}
@@ -255,16 +287,42 @@ export function ARScanner() {
                 ) : (
                     /* Scanning/Detected View */
                     <div className="px-4">
-                        {/* Simulated Camera View / Detection */}
-                        <div className="relative rounded-2xl overflow-hidden bg-gray-800 aspect-video mb-6">
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                {detectedArea === null ? (
-                                    <div className="text-center">
-                                        <div className="w-16 h-16 border-4 border-red-500 border-t-transparent 
-                                  rounded-full animate-spin mb-4 mx-auto" />
-                                        <p className="text-red-400">Scanning for surfaces...</p>
+                        {/* Camera View / Detection */}
+                        <div className="relative rounded-2xl overflow-hidden bg-black aspect-[9/16] mb-6 shadow-2xl ring-1 ring-white/10">
+                            {/* Real Video Feed */}
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="absolute inset-0 w-full h-full object-cover"
+                            />
+
+                            {/* Overlay UI */}
+                            <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
+                                {cameraError && (
+                                    <div className="bg-red-500/20 backdrop-blur-md border border-red-500/50 rounded-2xl p-6">
+                                        <p className="text-red-400 font-bold mb-2">⚠️ Camera Error</p>
+                                        <p className="text-sm text-gray-300">{cameraError}</p>
+                                        <button
+                                            onClick={() => window.location.reload()}
+                                            className="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg text-xs font-bold"
+                                        >
+                                            Retry
+                                        </button>
                                     </div>
-                                ) : (
+                                )}
+
+                                {!cameraError && detectedArea === null && (
+                                    <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-6 border border-white/10">
+                                        <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent 
+                                  rounded-full animate-spin mb-4 mx-auto" />
+                                        <p className="text-emerald-400 font-bold">Initalizing AR Engine...</p>
+                                        <p className="text-xs text-gray-300 mt-2">Surface detection requires slow movement</p>
+                                    </div>
+                                )}
+
+                                {!cameraError && detectedArea !== null && (
                                     <div className="absolute inset-0">
                                         {/* Red overlay for impervious area */}
                                         <div className="absolute inset-4 rounded-xl bg-red-500/30 border-2 border-red-500 
