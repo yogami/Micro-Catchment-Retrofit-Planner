@@ -16,6 +16,7 @@ test.describe('Volume-Based Sizing & WQv Integration', () => {
 
     test('should allow switching between Rate-Based and Volume-Based sizing', async ({ page }) => {
         // 1. Initial state should be Rate-based (Intensity)
+        await page.waitForSelector('text=Storm Intensity', { timeout: 10000 });
         await expect(page.locator('text=Storm Intensity')).toBeVisible();
 
         // 2. Locate the calculation mode toggle

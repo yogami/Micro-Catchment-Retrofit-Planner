@@ -16,6 +16,8 @@ test.describe('NOAA Atlas 14 Integration & Step Intensity Toggle', () => {
 
     test('should allow switching to manual intensity mode and entering NOAA 10-year storm values', async ({ page }) => {
         // 1. Initial state should show Storm Intensity card
+        // Wait for demo to initialize and lock results
+        await page.waitForSelector('text=Storm Intensity', { timeout: 10000 });
         await expect(page.locator('text=Storm Intensity')).toBeVisible();
 
         // 2. Click the Storm Intensity card to open controls

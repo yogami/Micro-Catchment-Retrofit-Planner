@@ -24,12 +24,65 @@ export async function computeRunoffWithPINN(
 
 /** Runoff coefficients for different surface types */
 export const RUNOFF_COEFFICIENTS = {
-    impervious: 0.9,    // Asphalt, concrete
-    semiPervious: 0.6,  // Gravel, compacted soil
-    permeable: 0.3,     // Grass, gardens
-    rooftop: 0.85,      // Building roofs
-} as const;
+    impervious: 0.95,
+    pervious: 0.25,
+    permeablePaving: 0.45
+};
 
+export interface RegulationProfile {
+    id: 'VA' | 'BE' | 'DEFAULT';
+    name: string;
+    description: string;
+    designDepth_mm: number;
+    designIntensity_mm_hr: number;
+    rvFormula: (imperviousPercent: number) => number;
+    units: 'imperial' | 'metric';
+}
+
+export const REGULATION_PROFILES: Record<string, RegulationProfile> = {
+    VA: {
+        id: 'VA',
+        name: 'Virginia Stormwater Handbook (9VAC25-870)',
+        description: 'US EPA/Virginia DEQ standards for Northern Virginia.',
+        designDepth_mm: 25.4 * 1.2, // 1.2 inches standard for high-performance BMPs
+        designIntensity_mm_hr: 50.8, // ~2 in/hr (10-yr Atlas 14 baseline)
+        rvFormula: (i) => 0.05 + (0.009 * i), // Virginia Rv = 0.05 + 0.009(I)
+        units: 'imperial'
+    },
+    BE: {
+        id: 'BE',
+        name: 'Berliner Regenwasseragentur (Schwammstadt)',
+        description: 'German DWA-A 138 / Sponge City Berlin guidelines.',
+        designDepth_mm: 30.0, // Berlin target for onsite retention
+        designIntensity_mm_hr: 45.0, // Typical central European 10-yr event
+        rvFormula: () => 0.9, // Fixed high-density urban coefficient
+        units: 'metric'
+    },
+    DEFAULT: {
+        id: 'DEFAULT',
+        name: 'Standard EPA / Global Baseline',
+        description: 'Generalized rational method baseline.',
+        designDepth_mm: 25.4, // 1 inch
+        designIntensity_mm_hr: 50.0,
+        rvFormula: () => 0.9,
+        units: 'metric'
+    }
+};
+
+/**
+ * Geographic lookup for regulation profile
+ */
+export function getProfileForLocation(lat: number, lon: number): RegulationProfile {
+    // Basic bounding box check for Virginia (approximate)
+    if (lat > 36.5 && lat < 39.5 && lon > -83.5 && lon < -75.5) {
+        return REGULATION_PROFILES.VA;
+    }
+    // Basic bounding box for Berlin/Brandenburg
+    if (lat > 52.3 && lat < 52.7 && lon > 13.0 && lon < 13.7) {
+        return REGULATION_PROFILES.BE;
+    }
+    return REGULATION_PROFILES.DEFAULT;
+}
 export type SurfaceType = keyof typeof RUNOFF_COEFFICIENTS;
 
 export interface GreenFix {
@@ -79,8 +132,20 @@ export function computeWQv(
     area_m2: number,
     coeff: number = 0.9
 ): number {
-    // mm * m² = L (since 1mm on 1m² = 1L)
+    // mm * m² = L
     return depth_mm * area_m2 * coeff;
+}
+
+/**
+ * Compute WQv with regional Rv formula
+ */
+export function computeRegionalWQv(
+    depth_mm: number,
+    area_m2: number,
+    profile: RegulationProfile
+): number {
+    const rv = profile.rvFormula(100); // Assuming 100% impervious catchments for scanning
+    return depth_mm * area_m2 * rv;
 }
 
 /**
@@ -185,15 +250,17 @@ export function calculateTotalReduction(
 export function suggestGreenFixes(
     area_m2: number,
     rainfall: number = 50,
-    mode: 'rate' | 'volume' = 'rate'
+    mode: 'rate' | 'volume' = 'rate',
+    profile: RegulationProfile = REGULATION_PROFILES.DEFAULT
 ): GreenFix[] {
     // Standard recommendations based on area
     const fixes: GreenFix[] = [];
+    const rv = profile.rvFormula(100);
 
     // If in volume mode, we might want to size specifically for the WQv
     const designVolume = mode === 'volume'
-        ? computeWQv(rainfall, area_m2, RUNOFF_COEFFICIENTS.impervious)
-        : computePeakRunoff(rainfall, area_m2, RUNOFF_COEFFICIENTS.impervious) * 3600; // Simulated volume for 1hr
+        ? computeWQv(rainfall, area_m2, rv)
+        : computePeakRunoff(rainfall, area_m2, rv) * 3600; // Simulated volume for 1hr
 
     void designVolume; // For now keeping the heuristic sizing, but marking volume for future refinement
 

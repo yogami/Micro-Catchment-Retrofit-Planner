@@ -5,8 +5,8 @@ import { ModelPlacement } from './ModelPlacement';
 import { DemoOverlay, useDemoState } from './DemoOverlay';
 import { ValidationChart } from './ValidationChart';
 import { openMeteoClient } from '../services/openMeteoClient';
-import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, RUNOFF_COEFFICIENTS, computeRunoffWithPINN, computeWQv } from '../utils/hydrology';
-import type { GreenFix } from '../utils/hydrology';
+import { suggestGreenFixes, calculateTotalReduction, computePeakRunoff, computeRunoffWithPINN, computeWQv, getProfileForLocation, REGULATION_PROFILES } from '../utils/hydrology';
+import type { GreenFix, RegulationProfile } from '../utils/hydrology';
 import { useUnitStore } from '../store/useUnitStore';
 import { convertArea, convertRainfall, convertFlow, getAreaUnit, getRainUnit, getFlowUnit, convertDepth, convertVolume, getDepthUnit, getVolumeUnit } from '../utils/units';
 
@@ -17,7 +17,7 @@ export function ARScanner() {
     const { user, signOut } = useAuth();
     const navigate = useNavigate();
     const locationState = useLocation();
-    const { unitSystem, toggleUnitSystem } = useUnitStore();
+    const { unitSystem, toggleUnitSystem, setUnitSystem } = useUnitStore();
 
     // Import location state for demo
     const demoScenario = locationState.state?.demoScenario;
@@ -38,36 +38,58 @@ export function ARScanner() {
     const [isLocked, setIsLocked] = useState(false);
     const [intensityMode, setIntensityMode] = useState<'auto' | 'manual'>('auto');
     const [manualIntensity, setManualIntensity] = useState<number>(50); // Default 50mm/hr (~2 in/hr)
+    const [activeProfile, setActiveProfile] = useState<RegulationProfile>(REGULATION_PROFILES.DEFAULT);
     const [sizingMode, setSizingMode] = useState<'rate' | 'volume'>('rate');
     const [manualDepth, setManualDepth] = useState<number>(30.48); // Default 1.2 inches (30.48mm)
+
+    // Handle Location -> Profile Sync
+    useEffect(() => {
+        if (location) {
+            const profile = getProfileForLocation(location.lat, location.lon);
+            setActiveProfile(profile);
+
+            // Auto-sync units on first detection or scenario load
+            if (profile.id !== 'DEFAULT') {
+                setUnitSystem(profile.units);
+                setManualIntensity(profile.designIntensity_mm_hr);
+                setManualDepth(profile.designDepth_mm);
+            }
+        }
+    }, [location, setUnitSystem]);
 
     // Handle Demo Auto-Start
     useEffect(() => {
         if (demoScenario && !isScanning) {
             async function startDemo() {
                 setIsLoadingRainfall(true);
+                let lat = 0, lon = 0, name = '';
                 if (demoScenario === 'fairfax') {
-                    const lat = 38.8462, lon = -77.3064; // Fairfax, VA
-                    const storm = await openMeteoClient.getDesignStorm(lat, lon);
-                    setRainfall(storm);
-                    setLocation({ lat, lon });
-                    setLocationName('Fairfax, VA');
-                    setDetectedArea(120);
+                    lat = 38.8462; lon = -77.3064; name = 'Fairfax, VA';
                 } else if (demoScenario === 'berlin') {
-                    const lat = 52.52, lon = 13.405; // Berlin
+                    lat = 52.52; lon = 13.405; name = 'Berlin';
+                }
+
+                if (lat !== 0) {
+                    const profile = getProfileForLocation(lat, lon);
+                    setActiveProfile(profile);
+                    setUnitSystem(profile.units);
+                    setManualIntensity(profile.designIntensity_mm_hr);
+                    setManualDepth(profile.designDepth_mm);
+
                     const storm = await openMeteoClient.getDesignStorm(lat, lon);
                     setRainfall(storm);
                     setLocation({ lat, lon });
-                    setLocationName('Berlin');
-                    setDetectedArea(80);
+                    setLocationName(name);
+                    setDetectedArea(demoScenario === 'fairfax' ? 120 : 80);
                 }
+
                 setIsLoadingRainfall(false);
                 setIsScanning(true);
                 setIsLocked(true);
             }
             startDemo();
         }
-    }, [demoScenario, isScanning]);
+    }, [demoScenario, isScanning, setUnitSystem]);
 
     // Detect location and fetch rainfall
     useEffect(() => {
@@ -110,10 +132,10 @@ export function ARScanner() {
             const currentRainfall = sizingMode === 'rate'
                 ? (intensityMode === 'auto' ? rainfall : manualIntensity)
                 : manualDepth;
-            const suggestedFixes = suggestGreenFixes(detectedArea, currentRainfall, sizingMode);
+            const suggestedFixes = suggestGreenFixes(detectedArea, currentRainfall, sizingMode, activeProfile);
             setFixes(suggestedFixes);
         }
-    }, [detectedArea, rainfall, sizingMode, intensityMode, manualIntensity, manualDepth]);
+    }, [detectedArea, rainfall, sizingMode, intensityMode, manualIntensity, manualDepth, activeProfile]);
 
     const handleStartScan = () => {
         setIsScanning(true);
@@ -164,13 +186,15 @@ export function ARScanner() {
                     if (mounted) setPeakRunoff(q);
                     setIsPinnActive(true);
                 } catch (e) {
-                    const q = computePeakRunoff(currentIntensity, detectedArea, RUNOFF_COEFFICIENTS.impervious);
+                    const rv = activeProfile.rvFormula(100);
+                    const q = computePeakRunoff(currentIntensity, detectedArea, rv);
                     if (mounted) setPeakRunoff(q);
                     setIsPinnActive(false);
                 }
 
                 // WQv (Volume)
-                const v = computeWQv(currentDepth, detectedArea, RUNOFF_COEFFICIENTS.impervious);
+                const rv = activeProfile.rvFormula(100);
+                const v = computeWQv(currentDepth, detectedArea, rv);
                 if (mounted) setWqv(v);
             } else {
                 setPeakRunoff(0);
@@ -510,14 +534,23 @@ export function ARScanner() {
 
                                 {sizingMode === 'volume' && (
                                     <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/30 rounded-2xl animate-in fade-in zoom-in-95">
-                                        <p className="text-purple-400 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2">
-                                            📏 Volume-Based Compliance Mode
-                                        </p>
-                                        <p className="text-[10px] text-gray-400 leading-tight">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <p className="text-purple-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                📏 Volume-Based Compliance Mode
+                                            </p>
+                                            <span className="text-[8px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded font-bold">
+                                                {activeProfile.id} PROFILED
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 leading-tight mb-2">
                                             Sizing based on Water Quality Volume (WQv).
                                             Target Depth: {convertDepth(manualDepth, unitSystem).toFixed(1)}{getDepthUnit(unitSystem)}.
                                             Total Storage Required: {Math.round(convertVolume(wqv, unitSystem))}{getVolumeUnit(unitSystem)}.
                                         </p>
+                                        <div className="pt-2 border-t border-purple-500/20">
+                                            <p className="text-[8px] text-purple-300/60 uppercase font-bold mb-1">Active Design Standard:</p>
+                                            <p className="text-[9px] text-purple-200/80 italic">{activeProfile.name}</p>
+                                        </div>
                                     </div>
                                 )}
 
