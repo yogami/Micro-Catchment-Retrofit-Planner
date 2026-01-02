@@ -1,0 +1,143 @@
+{
+    "rain_garden": {
+        "usa_va": {
+            "TN": 0.25,
+            "TP": 0.42,
+            "sediment": 15
+        },
+        "usa_ny": {
+            "TN": 0.28,
+            "TP": 0.45,
+            "sediment": 14
+        },
+        "usa_ca": {
+            "TN": 0.22,
+            "TP": 0.38,
+            "sediment": 12
+        },
+        "germany": {
+            "TN": 0.22,
+            "TP": 0.38,
+            "sediment": 13
+        },
+        "uk": {
+            "TN": 0.24,
+            "TP": 0.40,
+            "sediment": 14
+        },
+        "default": {
+            "TN": 0.25,
+            "TP": 0.40,
+            "sediment": 14
+        }
+    },
+    "permeable_pavement": {
+        "usa_va": {
+            "TN": 0.18,
+            "TP": 0.32,
+            "sediment": 18
+        },
+        "usa_ny": {
+            "TN": 0.20,
+            "TP": 0.35,
+            "sediment": 17
+        },
+        "usa_ca": {
+            "TN": 0.16,
+            "TP": 0.28,
+            "sediment": 15
+        },
+        "germany": {
+            "TN": 0.17,
+            "TP": 0.30,
+            "sediment": 16
+        },
+        "uk": {
+            "TN": 0.18,
+            "TP": 0.32,
+            "sediment": 17
+        },
+        "default": {
+            "TN": 0.18,
+            "TP": 0.30,
+            "sediment": 16
+        }
+    },
+    "tree_planter": {
+        "usa_va": {
+            "TN": 0.12,
+            "TP": 0.18,
+            "sediment": 8
+        },
+        "usa_ny": {
+            "TN": 0.14,
+            "TP": 0.20,
+            "sediment": 9
+        },
+        "usa_ca": {
+            "TN": 0.10,
+            "TP": 0.15,
+            "sediment": 7
+        },
+        "germany": {
+            "TN": 0.11,
+            "TP": 0.16,
+            "sediment": 8
+        },
+        "uk": {
+            "TN": 0.12,
+            "TP": 0.17,
+            "sediment": 8
+        },
+        "default": {
+            "TN": 0.12,
+            "TP": 0.17,
+            "sediment": 8
+        }
+    },
+    "bioswale": {
+        "usa_va": {
+            "TN": 0.20,
+            "TP": 0.35,
+            "sediment": 12
+        },
+        "germany": {
+            "TN": 0.18,
+            "TP": 0.32,
+            "sediment": 11
+        },
+        "default": {
+            "TN": 0.19,
+            "TP": 0.33,
+            "sediment": 11
+        }
+    },
+    "green_roof": {
+        "usa_va": {
+            "TN": 0.15,
+            "TP": 0.22,
+            "sediment": 5
+        },
+        "germany": {
+            "TN": 0.18,
+            "TP": 0.25,
+            "sediment": 6
+        },
+        "default": {
+            "TN": 0.16,
+            "TP": 0.23,
+            "sediment": 5
+        }
+    },
+    "_units": {
+        "TN": "lb/acre-yr",
+        "TP": "lb/acre-yr",
+        "sediment": "tons/acre-yr"
+    },
+    "_sources": [
+        "EPA BMP Performance Database",
+        "Virginia DEQ Runoff Reduction Method",
+        "DWA-A 138 German Standards",
+        "CIRIA SuDS Manual (UK)"
+    ]
+}
