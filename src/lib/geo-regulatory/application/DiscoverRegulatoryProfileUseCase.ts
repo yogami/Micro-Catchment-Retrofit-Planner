@@ -27,8 +27,11 @@ export interface DiscoverResponse<TParams = Record<string, unknown>> extends Dis
 export class DiscoverRegulatoryProfileUseCase {
     private cache: Map<string, { result: DiscoveryResult<unknown>; timestamp: number }> = new Map();
     private readonly cacheTtlMs = 5 * 60 * 1000;
+    private readonly discoveryService: DiscoveryService;
 
-    constructor(private readonly discoveryService: DiscoveryService) { }
+    constructor(discoveryService: DiscoveryService) {
+        this.discoveryService = discoveryService;
+    }
 
     async execute<TParams = Record<string, unknown>>(request: DiscoverRequest): Promise<DiscoverResponse<TParams>> {
         const startTime = Date.now();
