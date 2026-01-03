@@ -120,7 +120,7 @@ export class ComplianceCheckService {
                 };
 
             case 'bcr':
-                const bcrPassed = project.hasBCR && (project.bcrValue ?? 0) >= 1.0;
+                const bcrPassed = (project.hasBCR === true) && (project.bcrValue ?? 0) >= 1.0;
                 return {
                     id: 'bcr',
                     label: 'Cost-Benefit Ratio ≥ 1.0',

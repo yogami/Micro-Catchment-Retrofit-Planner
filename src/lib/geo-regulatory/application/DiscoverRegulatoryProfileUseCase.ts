@@ -26,10 +26,14 @@ export interface DiscoverResponse<TParams = Record<string, unknown>> extends Dis
 
 export class DiscoverRegulatoryProfileUseCase {
     // Simple in-memory cache (production would use Redis, etc.)
-    private cache: Map<string, { result: DiscoveryResult; timestamp: number }> = new Map();
+    private cache: Map<string, { result: DiscoveryResult<any>; timestamp: number }> = new Map();
     private readonly cacheTtlMs = 5 * 60 * 1000; // 5 minutes
 
-    constructor(private readonly discoveryService: DiscoveryService) { }
+    private readonly discoveryService: DiscoveryService;
+
+    constructor(discoveryService: DiscoveryService) {
+        this.discoveryService = discoveryService;
+    }
 
     /**
      * Execute the discovery use case

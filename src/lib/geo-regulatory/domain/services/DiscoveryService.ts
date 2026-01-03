@@ -46,10 +46,16 @@ export interface DiscoveryResult<TParams = Record<string, unknown>> {
  * Core discovery service - no external dependencies, pure domain logic
  */
 export class DiscoveryService {
+    private readonly geocodingPort: GeocodingPort;
+    private readonly profileRepository: ProfileRepositoryPort;
+
     constructor(
-        private readonly geocodingPort: GeocodingPort,
-        private readonly profileRepository: ProfileRepositoryPort
-    ) { }
+        geocodingPort: GeocodingPort,
+        profileRepository: ProfileRepositoryPort
+    ) {
+        this.geocodingPort = geocodingPort;
+        this.profileRepository = profileRepository;
+    }
 
     /**
      * Discover the applicable regulatory profile for a GPS location
