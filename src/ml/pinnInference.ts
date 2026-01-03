@@ -3,11 +3,6 @@
  * 
  * Handles loading the pre-trained Physics-Informed Neural Network
  * and running high-speed inference on the client device.
- * 
- * Features:
- * - WebGL acceleration with automatic CPU fallback
- * - Model caching
- * - Robust error handling
  */
 
 import * as tf from '@tensorflow/tfjs';
@@ -36,154 +31,129 @@ function normalize(value: number, key: keyof typeof NORMALIZATION): number {
 
 /**
  * Initialize the PINN inference engine
- * Sets up the backend (WebGL preferred) and warms up the model
  */
 export async function initPINNEngine(): Promise<boolean> {
     try {
-        // 1. Backend Setup
-        try {
-            await tf.setBackend('webgl');
-            console.log('PINN Engine: Using WebGL backend');
-        } catch (e) {
-            console.warn('PINN Engine: WebGL unavailable, falling back to CPU', e);
-            await tf.setBackend('cpu');
-        }
+        await tf.setBackend('webgl').catch(() => tf.setBackend('cpu'));
         await tf.ready();
-
-        // 2. Load Model
         return await loadModel();
-
-    } catch (e) {
-        console.error('PINN Engine: Initialization failed', e);
+    } catch {
         return false;
     }
 }
 
-/**
- * Load the pre-trained model
- */
-async function loadModel(): Promise<boolean> {
-    if (loadedModel) return true;
-    if (isLoading) return false; // simple concurrency check
+async function tryLoadModel(): Promise<tf.LayersModel | tf.Sequential | null> {
+    try {
+        const model = await tf.loadLayersModel(MODEL_URL);
+        return model;
+    } catch {
+        return await createPINNModel();
+    }
+}
 
+async function warmupModel(model: tf.LayersModel | tf.Sequential): Promise<void> {
+    const dummyInput = tf.zeros([1, 5]);
+    const warmup = model.predict(dummyInput) as tf.Tensor;
+    warmup.dispose();
+    dummyInput.dispose();
+}
+
+/**
+ * Load the PINN model if not already loaded
+ */
+export async function loadModel(): Promise<boolean> {
+    if (loadedModel) return true;
+    if (isLoading) return false;
+    return performLoad();
+}
+
+async function performLoad(): Promise<boolean> {
     isLoading = true;
     try {
-        console.log(`PINN Engine: Loading model from ${MODEL_URL}...`);
-        loadedModel = await tf.loadLayersModel(MODEL_URL);
-        console.log('PINN Engine: Model loaded successfully');
-
-        // Warmup inference
-        const dummyInput = tf.zeros([1, 5]);
-        const warmup = loadedModel.predict(dummyInput) as tf.Tensor;
-        warmup.dispose();
-        dummyInput.dispose();
-
-        return true;
-    } catch (error) {
-        console.error('PINN Engine: Failed to load trained model, creating fresh fallback...', error);
-
-        // Fallback: Use the fresh architectural model (untrained but runnable)
-        // This ensures the app doesn't crash, even if predictions are garbage
-        // In production, we'd want to retry or alert.
-        loadedModel = await createPINNModel();
-        return true;
+        loadedModel = await tryLoadModel();
+        if (loadedModel) await warmupModel(loadedModel);
     } finally {
         isLoading = false;
     }
+    return !!loadedModel;
+}
+
+function normalizeInput(input: PINNInput): number[] {
+    return [
+        normalize(input.x, 'x'),
+        normalize(input.t, 't'),
+        normalize(input.rainfall, 'rainfall'),
+        normalize(input.slope, 'slope'),
+        normalize(input.manningN, 'manningN'),
+    ];
 }
 
 /**
  * Run PINN inference for a single input scenario
  */
 export async function runPINNInference(input: PINNInput): Promise<PINNOutput> {
-    // Ensure model is ready (lazy load)
-    if (!loadedModel) {
-        const success = await loadModel();
-        if (!success) {
-            throw new Error('PINN model not available');
-        }
+    if (!loadedModel && !(await loadModel())) {
+        throw new Error('PINN model not available');
     }
 
-    return tf.tidy(() => {
-        // 1. Normalize Inputs
-        const normalized = [
-            normalize(input.x, 'x'),
-            normalize(input.t, 't'),
-            normalize(input.rainfall, 'rainfall'),
-            normalize(input.slope, 'slope'),
-            normalize(input.manningN, 'manningN'),
-        ];
-
-        const inputTensor = tf.tensor2d([normalized]);
-
-        // 2. Predict
+    const discharge = tf.tidy(() => {
+        const inputTensor = tf.tensor2d([normalizeInput(input)]);
         const outputTensor = loadedModel!.predict(inputTensor) as tf.Tensor;
-        const rawOutput = outputTensor.dataSync()[0]; // L/s (normalized approx)
-
-        // 3. Denormalize
-        // During training we trained on output / 200
-        const MAX_Q = 200;
-        let discharge = rawOutput * MAX_Q;
-
-        // Apply physics constraints
-        if (input.t <= 0) discharge = 0;
-        if (discharge < 0) discharge = 0;
-
-        // 4. Derive other hydraulic parameters (Manning's Eq)
-        // Q = (1/n) * W * h^(5/3) * S^0.5
-        // h = ( Q*n / (W*S^0.5) ) ^ 0.6
-        const width = 10; // m
-        // const alpha = Math.sqrt(input.slope) / input.manningN; // alpha was unused in this simplified inverse
-        const depthM = discharge > 0.001
-            ? Math.pow((discharge / 1000 * input.manningN) / (width * Math.sqrt(input.slope)), 0.6)
-            : 0;
-
-        const velocity = depthM > 0
-            ? (discharge / 1000) / (width * depthM)
-            : 0;
-
-        return {
-            discharge,
-            depth: depthM * 1000, // mm
-            velocity, // m/s
-            confidence: 0.92, // High confidence for trained model
-            isPINNPrediction: true
-        };
+        return outputTensor.dataSync()[0] * 200; // Denormalization
     });
+
+    return buildOutput(discharge, input);
+}
+
+function buildOutput(discharge: number, input: PINNInput): PINNOutput {
+    const depthM = calculateDepthM(discharge, input);
+    const velocity = calculateVelocity(discharge, depthM);
+    const actualDischarge = input.t <= 0 ? 0 : Math.max(0, discharge);
+
+    return {
+        discharge: actualDischarge,
+        depth: depthM * 1000,
+        velocity,
+        confidence: 0.92,
+        isPINNPrediction: true
+    };
+}
+
+function calculateDepthM(discharge: number, input: PINNInput): number {
+    if (discharge <= 0.001) return 0;
+    const width = 10;
+    const numerator = discharge / 1000 * input.manningN;
+    const denominator = width * Math.sqrt(input.slope);
+    return Math.pow(numerator / denominator, 0.6);
+}
+
+function calculateVelocity(discharge: number, depthM: number): number {
+    if (depthM <= 0) return 0;
+    return (discharge / 1000) / (10 * depthM);
+}
+
+function isSanePrediction(pinn: number, rational: number): boolean {
+    return pinn <= rational * 3 && pinn >= rational * 0.2;
 }
 
 /**
  * Robust Hybrid Prediction
- * Combines PINN accuracy with Rational Method reliability
  */
 export async function getRobustRunoffPrediction(
     rainfall: number,
     area: number,
     slope: number = 0.02
 ): Promise<number> {
-    const input: PINNInput = {
-        x: 100, // assume outlet
-        t: 60,  // peak time approx
-        rainfall,
-        slope,
-        manningN: 0.015 // default asphalt
-    };
+    const rational = computeRationalMethod(rainfall, area);
+    const input: PINNInput = { x: 100, t: 60, rainfall, slope, manningN: 0.015 };
+    return tryPINN(input, rational);
+}
 
+async function tryPINN(input: PINNInput, rational: number): Promise<number> {
     try {
         const pinn = await runPINNInference(input);
-
-        // Validation Gate: Check if PINN result is sane compared to Rational Method
-        const rational = computeRationalMethod(rainfall, area);
-
-        // If PINN is > 3x Rational or < 0.2x Rational, it might be hallucinating
-        if (pinn.discharge > rational * 3 || pinn.discharge < rational * 0.2) {
-            console.warn(`PINN outlier detected (PINN: ${pinn.discharge.toFixed(2)}, Rational: ${rational.toFixed(2)}). Using Rational.`);
-            return rational;
-        }
-
-        return pinn.discharge;
-    } catch (e) {
-        console.error('PINN inference failed, using Rational Method', e);
-        return computeRationalMethod(rainfall, area);
+        return isSanePrediction(pinn.discharge, rational) ? pinn.discharge : rational;
+    } catch {
+        return rational;
     }
 }

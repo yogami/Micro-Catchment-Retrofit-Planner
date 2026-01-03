@@ -142,9 +142,25 @@ function normalize(value: number, key: keyof typeof NORMALIZATION): number {
 }
 
 function denormalizeDischarge(value: number, input: PINNInput): number {
-    // Scale output based on catchment characteristics
-    const rainLitersPerSecond = (input.rainfall / 3600) * 100; // Approximate for 100m² 
+    const rainLitersPerSecond = (input.rainfall / 3600) * 100;
     return value * rainLitersPerSecond;
+}
+
+function calculateDepthAndVelocity(discharge: number, input: PINNInput): { depth: number; velocity: number } {
+    const alpha = Math.sqrt(input.slope) / input.manningN;
+    const depth = discharge > 0 ? Math.pow(discharge / alpha, 0.6) * 1000 : 0;
+    const velocity = depth > 0 ? discharge / (10 * depth / 1000) : 0;
+    return { depth, velocity };
+}
+
+function getNormalizedInputArray(input: PINNInput): number[] {
+    return [
+        normalize(input.x, 'x'),
+        normalize(input.t, 't'),
+        normalize(input.rainfall, 'rainfall'),
+        normalize(input.slope, 'slope'),
+        normalize(input.manningN, 'manningN'),
+    ];
 }
 
 // ============ Prediction ============
@@ -154,45 +170,21 @@ function denormalizeDischarge(value: number, input: PINNInput): number {
  */
 export async function predictRunoff(input: PINNInput): Promise<PINNOutput> {
     const model = await getModel();
-
-    // Normalize inputs
-    const normalizedInput = [
-        normalize(input.x, 'x'),
-        normalize(input.t, 't'),
-        normalize(input.rainfall, 'rainfall'),
-        normalize(input.slope, 'slope'),
-        normalize(input.manningN, 'manningN'),
-    ];
-
-    // Run inference
-    const inputTensor = tf.tensor2d([normalizedInput]);
+    const inputTensor = tf.tensor2d([getNormalizedInputArray(input)]);
     const outputTensor = model.predict(inputTensor) as tf.Tensor;
     const rawOutput = outputTensor.dataSync()[0];
 
-    // Cleanup tensors
     inputTensor.dispose();
     outputTensor.dispose();
 
-    // Denormalize and apply physics constraints
-    let discharge = denormalizeDischarge(rawOutput, input);
-
-    // Physics constraint: discharge at t=0 should be zero
-    if (input.t <= 0) {
-        discharge = 0;
-    }
-
-    // Estimate depth from Manning's equation (inverse)
-    const alpha = Math.sqrt(input.slope) / input.manningN;
-    const depth = discharge > 0 ? Math.pow(discharge / alpha, 0.6) * 1000 : 0; // mm
-
-    // Velocity from continuity: v = Q / A ≈ Q / (width * h)
-    const velocity = depth > 0 ? discharge / (10 * depth / 1000) : 0; // Assume 10m width
+    const discharge = input.t <= 0 ? 0 : denormalizeDischarge(rawOutput, input);
+    const { depth, velocity } = calculateDepthAndVelocity(discharge, input);
 
     return {
         discharge,
         depth,
         velocity,
-        confidence: 0.85, // TODO: Implement uncertainty quantification
+        confidence: 0.85,
         isPINNPrediction: true,
     };
 }
@@ -254,41 +246,31 @@ export function computeRationalMethod(
 
 // ============ Hybrid Prediction ============
 
+function getFallbackResult(rainfall: number, area: number, confidence: number): PINNOutput {
+    return {
+        discharge: computeRationalMethod(rainfall, area),
+        depth: 0,
+        velocity: 0,
+        confidence,
+        isPINNPrediction: false,
+    };
+}
+
 /**
  * Get runoff prediction with PINN, falling back to rational method
  */
-export async function getHybridPrediction(
-    input: PINNInput,
-    area: number = 100
-): Promise<PINNOutput> {
+export async function getHybridPrediction(input: PINNInput, area: number = 100): Promise<PINNOutput> {
     try {
-        const pinnResult = await predictRunoff(input);
-
-        // Sanity check: PINN result should be in reasonable range
-        const rationalEstimate = computeRationalMethod(input.rainfall, area);
-        const ratio = pinnResult.discharge / rationalEstimate;
-
-        if (ratio > 0.3 && ratio < 3.0) {
-            return pinnResult;
-        }
-
-        // PINN result outside reasonable bounds, fall back
-        console.warn('PINN prediction outside bounds, using rational fallback');
-        return {
-            discharge: rationalEstimate,
-            depth: 0,
-            velocity: 0,
-            confidence: 0.5,
-            isPINNPrediction: false,
-        };
-    } catch (error) {
-        console.error('PINN prediction failed:', error);
-        return {
-            discharge: computeRationalMethod(input.rainfall, area),
-            depth: 0,
-            velocity: 0,
-            confidence: 0.3,
-            isPINNPrediction: false,
-        };
+        const pinn = await predictRunoff(input);
+        const rational = computeRationalMethod(input.rainfall, area);
+        return decidePinnUsage(pinn, rational, input, area);
+    } catch {
+        return getFallbackResult(input.rainfall, area, 0.3);
     }
+}
+
+function decidePinnUsage(pinn: PINNOutput, rational: number, input: PINNInput, area: number): PINNOutput {
+    const ratio = pinn.discharge / rational;
+    if (ratio > 0.3 && ratio < 3.0) return pinn;
+    return getFallbackResult(input.rainfall, area, 0.5);
 }

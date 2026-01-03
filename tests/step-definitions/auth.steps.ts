@@ -1,10 +1,18 @@
 import { Given, When, Then, Before } from '@cucumber/cucumber';
 import { expect } from '@jest/globals';
 
-// Mock Supabase client for testing
 let mockSession: { user: { email: string } | null } = { user: null };
-let mockProjects: Map<string, object> = new Map();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockProjects: Map<string, any> = new Map();
 let currentPage = '/';
+
+interface MockProject {
+    street_name: string;
+    screenshot: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    features: any[];
+    id: string;
+}
 
 Before(() => {
     mockSession = { user: null };
@@ -18,7 +26,6 @@ Given('I am on the landing page', function () {
 });
 
 When('I click "Start Scan" and enter my email {string}', async function (email: string) {
-    // Simulate Supabase auth
     mockSession = { user: { email } };
 });
 
@@ -37,11 +44,7 @@ Given('I am logged in', function () {
 });
 
 Given('I have scanned a street with impervious surfaces', function () {
-    // Mock scanned data exists
-    this.scannedData = {
-        area: 100,
-        surfaces: [{ type: 'parking', coeff: 0.9 }]
-    };
+    this.scannedData = { area: 100, surfaces: [{ type: 'parking', coeff: 0.9 }] };
 });
 
 When('I enter project name {string}', function (name: string) {
@@ -59,11 +62,11 @@ When('I click "Save Project"', function () {
     this.savedProjectId = projectId;
 });
 
-Then('the project saves to Supabase with:', function (dataTable: any) {
-    const project = mockProjects.get(this.savedProjectId);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+Then('the project saves to Supabase with:', function (_dataTable: unknown) {
+    const project = mockProjects.get(this.savedProjectId) as MockProject;
     expect(project).toBeDefined();
-    // Validate fields exist
-    expect((project as any).street_name).toBe(this.projectName);
+    expect(project.street_name).toBe(this.projectName);
 });
 
 Then('a shareable URL is generated', function () {
@@ -87,6 +90,5 @@ Then('I see the project details and AR screenshot', function () {
 });
 
 Then('I can export or continue editing', function () {
-    // UI state check - buttons should be available
     expect(true).toBe(true);
 });

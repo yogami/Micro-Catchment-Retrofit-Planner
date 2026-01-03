@@ -39,10 +39,21 @@ export async function exportProjectPDF(data: PDFExportData): Promise<void> {
         format: 'a4',
     });
 
-    const pageWidth = doc.internal.pageSize.getWidth();
     let y = 15;
+    y = drawPDFHeader(doc, data, y);
+    y = await drawARCapture(doc, data, y);
+    y = drawHydrologyData(doc, data, y);
+    y = drawProposedFeatures(doc, data, y);
+    y = drawImpactSummary(doc, data, y);
+    drawFundingPrograms(doc, data, y);
+    drawPDFFooter(doc);
 
-    // ========== HEADER ==========
+    const filename = `${data.streetName.replace(/\s+/g, '_')}_retrofit_plan.pdf`;
+    doc.save(filename);
+}
+
+function drawPDFHeader(doc: jsPDF, data: PDFExportData, y: number): number {
+    const pageWidth = doc.internal.pageSize.getWidth();
     doc.setFillColor(16, 185, 129); // Emerald
     doc.rect(0, 0, pageWidth, 35, 'F');
 
@@ -56,32 +67,32 @@ export async function exportProjectPDF(data: PDFExportData): Promise<void> {
     doc.setFontSize(10);
     doc.text(`Coordinates: ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}`, 10, y + 22);
 
-    y = 45;
+    return 45;
+}
 
-    // ========== AR SCREENSHOT ==========
+async function addCaptureToPDF(doc: jsPDF, container: HTMLElement | null, y: number): Promise<void> {
+    if (!container) {
+        doc.setFontSize(10);
+        doc.setTextColor(128, 128, 128);
+        doc.text('[AR screenshot placeholder - capture on device]', 10, y + 50);
+        return;
+    }
+    const canvas = await html2canvas(container);
+    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 10, y, 190, 100);
+}
+
+async function drawARCapture(doc: jsPDF, data: PDFExportData, y: number): Promise<number> {
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(12);
     doc.text('Site Analysis (AR Capture)', 10, y);
-    y += 5;
-
+    const container = data.screenshotElement || document.querySelector('#ar-container');
     try {
-        const container = data.screenshotElement || document.querySelector('#ar-container');
-        if (container) {
-            const canvas = await html2canvas(container as HTMLElement);
-            const imgData = canvas.toDataURL('image/png');
-            doc.addImage(imgData, 'PNG', 10, y, 190, 100);
-            y += 105;
-        } else {
-            doc.setFontSize(10);
-            doc.setTextColor(128, 128, 128);
-            doc.text('[AR screenshot placeholder - capture on device]', 10, y + 50);
-            y += 105;
-        }
-    } catch {
-        y += 105;
-    }
+        await addCaptureToPDF(doc, container as HTMLElement, y + 5);
+    } catch { /* ignore */ }
+    return y + 110;
+}
 
-    // ========== RAINFALL DATA ==========
+function drawHydrologyData(doc: jsPDF, data: PDFExportData, y: number): number {
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(12);
     doc.text('Hydrology Analysis', 10, y);
@@ -93,21 +104,17 @@ export async function exportProjectPDF(data: PDFExportData): Promise<void> {
     doc.text(`• Impervious Area: ${data.totalArea} m²`, 15, y);
     y += 6;
     doc.text(`• Peak Runoff: ${data.peakRunoff.toFixed(2)} L/s (before intervention)`, 15, y);
-    y += 10;
+    return y + 10;
+}
 
-    // ========== PROPOSED FEATURES ==========
+function drawProposedFeatures(doc: jsPDF, data: PDFExportData, y: number): number {
     doc.setFontSize(12);
     doc.text('Proposed Green Infrastructure', 10, y);
     y += 8;
 
-    let totalCost = 0;
-
     data.features.forEach((feature, index) => {
         const name = FEATURE_NAMES[feature.type];
         const reduction = Math.round(feature.reductionRate * 100);
-        const cost = feature.size * COST_PER_M2[feature.type];
-        totalCost += cost;
-
         doc.setFontSize(10);
         doc.text(
             `${index + 1}. ${name} (${feature.size}m²) → -${reduction}% runoff | ${feature.placement}`,
@@ -117,9 +124,17 @@ export async function exportProjectPDF(data: PDFExportData): Promise<void> {
         y += 6;
     });
 
-    y += 5;
+    return y + 5;
+}
 
-    // ========== IMPACT SUMMARY ==========
+function calculateTotalCost(features: GreenFix[]): number {
+    return features.reduce((sum, f) => sum + (f.size * COST_PER_M2[f.type]), 0);
+}
+
+function drawImpactSummary(doc: jsPDF, data: PDFExportData, y: number): number {
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const totalCost = calculateTotalCost(data.features);
+
     doc.setFillColor(236, 253, 245); // Light emerald
     doc.rect(10, y, pageWidth - 20, 25, 'F');
 
@@ -131,15 +146,16 @@ export async function exportProjectPDF(data: PDFExportData): Promise<void> {
     doc.setTextColor(0, 0, 0);
     doc.text(`Estimated Budget: €${totalCost.toLocaleString()} | Timeline: 4-6 weeks`, 15, y + 18);
 
-    y += 35;
+    return y + 35;
+}
 
-    // ========== MATCHED FUNDING PROGRAMS ==========
+function drawFundingPrograms(doc: jsPDF, data: PDFExportData, y: number): number {
     doc.setFontSize(12);
     doc.text('Matched Funding Programs', 10, y);
     y += 8;
 
-    // Dynamically match grants based on location and project
-    const grants: Grant[] = matchEligibleGrants({
+    const totalCost = calculateTotalCost(data.features);
+    const grants = matchEligibleGrants({
         latitude: data.latitude,
         longitude: data.longitude,
         totalCostEUR: totalCost,
@@ -147,37 +163,41 @@ export async function exportProjectPDF(data: PDFExportData): Promise<void> {
         areaM2: data.totalArea,
     });
 
-    doc.setFontSize(9);
-
     if (grants.length === 0) {
+        doc.setFontSize(9);
         doc.setTextColor(128, 128, 128);
         doc.text('No matching funding programs found for this location.', 15, y);
         y += 6;
     } else {
-        grants.slice(0, 4).forEach((grant) => {
-            doc.setTextColor(0, 0, 0);
-            doc.text(
-                `• ${grant.name}: Up to ${grant.maxFundingPercent}% (max €${grant.maxAmountEUR.toLocaleString()})`,
-                15,
-                y
-            );
-            y += 5;
-            if (grant.url) {
-                doc.setTextColor(59, 130, 246); // Blue
-                doc.text(`  → ${grant.url}`, 15, y);
-                y += 5;
-            }
-        });
+        y = drawGrantList(doc, grants, y);
     }
 
-    y += 5;
-
-    // ROI note
     doc.setFontSize(9);
     doc.setTextColor(0, 0, 0);
-    doc.text('Expected ROI: €1 avoided flood damage per €1 invested (10-year horizon)', 15, y);
+    doc.text('Expected ROI: €1 avoided flood damage per €1 invested (10-year horizon)', 15, y + 5);
+    return y + 15;
+}
 
-    // ========== FOOTER ==========
+function drawGrantList(doc: jsPDF, grants: Grant[], y: number): number {
+    doc.setFontSize(9);
+    grants.slice(0, 4).forEach((grant) => {
+        doc.setTextColor(0, 0, 0);
+        doc.text(
+            `• ${grant.name}: Up to ${grant.maxFundingPercent}% (max €${grant.maxAmountEUR.toLocaleString()})`,
+            15,
+            y
+        );
+        y += 5;
+        if (grant.url) {
+            doc.setTextColor(59, 130, 246);
+            doc.text(`  → ${grant.url}`, 15, y);
+            y += 5;
+        }
+    });
+    return y;
+}
+
+function drawPDFFooter(doc: jsPDF): void {
     doc.setFontSize(8);
     doc.setTextColor(128, 128, 128);
     doc.text(
@@ -185,9 +205,5 @@ export async function exportProjectPDF(data: PDFExportData): Promise<void> {
         10,
         285
     );
-
-    // ========== SAVE ==========
-    const filename = `${data.streetName.replace(/\s+/g, '_')}_retrofit_plan.pdf`;
-    doc.save(filename);
 }
 

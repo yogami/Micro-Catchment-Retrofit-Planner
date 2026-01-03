@@ -60,13 +60,13 @@ export class PollutantCalculationService {
         const phosphorus = rates.phosphorus_lb_acre_yr * area_acres * impervFraction * rainfallFactor;
         const nitrogen = rates.nitrogen_lb_acre_yr * area_acres * impervFraction * rainfallFactor;
 
-        return createPollutantLoadResult(
-            phosphorus,
-            nitrogen,
-            rates.sediment_percent,
-            'bmp_removal',
-            input.bmpType
-        );
+        return createPollutantLoadResult({
+            phosphorus_lb_yr: phosphorus,
+            nitrogen_lb_yr: nitrogen,
+            sediment_percent: rates.sediment_percent,
+            source: 'bmp_removal',
+            bmpType: input.bmpType
+        });
     }
 
     /**
@@ -82,12 +82,12 @@ export class PollutantCalculationService {
         const phosphorus = URBAN_LOADING_RATES.phosphorus_lb_acre_yr * area_acres * impervFraction * rainfallFactor;
         const nitrogen = URBAN_LOADING_RATES.nitrogen_lb_acre_yr * area_acres * impervFraction * rainfallFactor;
 
-        return createPollutantLoadResult(
-            phosphorus,
-            nitrogen,
-            0, // No sediment removal without BMPs
-            'baseline'
-        );
+        return createPollutantLoadResult({
+            phosphorus_lb_yr: phosphorus,
+            nitrogen_lb_yr: nitrogen,
+            sediment_percent: 0,
+            source: 'baseline'
+        });
     }
 
     /**
@@ -123,12 +123,12 @@ export class PollutantCalculationService {
         const postP = Math.max(0, baseline.phosphorus_lb_yr - totalPRemoval);
         const postN = Math.max(0, baseline.nitrogen_lb_yr - totalNRemoval);
 
-        return createPollutantLoadResult(
-            postP,
-            postN,
-            maxSedimentRemoval,
-            'post_retrofit'
-        );
+        return createPollutantLoadResult({
+            phosphorus_lb_yr: postP,
+            nitrogen_lb_yr: postN,
+            sediment_percent: maxSedimentRemoval,
+            source: 'post_retrofit'
+        });
     }
 
     /**

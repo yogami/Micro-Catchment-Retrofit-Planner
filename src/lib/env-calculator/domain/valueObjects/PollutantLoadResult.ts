@@ -33,13 +33,16 @@ export interface PrePostComparison {
 /**
  * Create a pollutant load result
  */
-export function createPollutantLoadResult(
-    phosphorus_lb_yr: number,
-    nitrogen_lb_yr: number,
-    sediment_percent: number,
-    source: 'baseline' | 'bmp_removal' | 'post_retrofit',
-    bmpType?: string
-): PollutantLoadResult {
+export interface PollutantLoadParams {
+    phosphorus_lb_yr: number;
+    nitrogen_lb_yr: number;
+    sediment_percent: number;
+    source: 'baseline' | 'bmp_removal' | 'post_retrofit';
+    bmpType?: string;
+}
+
+export function createPollutantLoadResult(params: PollutantLoadParams): PollutantLoadResult {
+    const { phosphorus_lb_yr, nitrogen_lb_yr, sediment_percent, source, bmpType } = params;
     return {
         phosphorus_lb_yr: Math.max(0, phosphorus_lb_yr),
         nitrogen_lb_yr: Math.max(0, nitrogen_lb_yr),

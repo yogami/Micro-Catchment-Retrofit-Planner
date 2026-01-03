@@ -64,50 +64,37 @@ export class ComplianceCheckService {
      */
     checkCompliance(project: ProjectData, grantId: GrantProgramId): ComplianceResult {
         const program = GRANT_PROGRAMS[grantId];
-        const checks: ComplianceCheck[] = [];
-
-        for (const req of program.requirements) {
-            const check = this.evaluateRequirement(req.id, project, grantId);
-            checks.push(check);
-        }
+        const checks = program.requirements.map(req => this.evaluateRequirement(req.id, project));
 
         // Add jurisdiction-specific checks
-        const jurisdictionChecks = this.getJurisdictionChecks(project);
-        checks.push(...jurisdictionChecks);
+        checks.push(...this.getJurisdictionChecks(project));
 
-        // Calculate score
-        const requiredChecks = checks.filter(c =>
-            program.requirements.find(r => r.id === c.id)?.required
-        );
+        const requiredIds = new Set(program.requirements.filter(r => r.required).map(r => r.id));
+        const requiredChecks = checks.filter(c => requiredIds.has(c.id));
+
         const passedRequired = requiredChecks.filter(c => c.passed).length;
         const totalRequired = requiredChecks.length || 1;
+        const eligible = passedRequired === totalRequired;
 
-        const allChecks = checks.filter(c => c.passed).length;
-        const totalChecks = checks.length || 1;
+        const score = this.calculateScore(checks, totalRequired, passedRequired);
+        const summary = this.generateSummary(project, checks);
+
+        return { grantProgram: grantId, score, eligible, checks, summary };
+    }
+
+    private calculateScore(checks: ComplianceCheck[], totalRequired: number, passedRequired: number): number {
+        const passedAll = checks.filter(c => c.passed).length;
+        const totalAll = checks.length || 1;
 
         // Score: 70% for required, 30% for optional
         const requiredScore = (passedRequired / totalRequired) * 70;
-        const optionalScore = (allChecks / totalChecks) * 30;
-        const score = Math.round(requiredScore + optionalScore);
-
-        const eligible = passedRequired === totalRequired;
-
-        // Generate summary
-        const summary = this.generateSummary(project, checks);
-
-        return {
-            grantProgram: grantId,
-            score,
-            eligible,
-            checks,
-            summary
-        };
+        const optionalScore = (passedAll / totalAll) * 30;
+        return Math.round(requiredScore + optionalScore);
     }
 
     private evaluateRequirement(
         reqId: string,
-        project: ProjectData,
-        _grantId: GrantProgramId
+        project: ProjectData
     ): ComplianceCheck {
         const evaluators: Record<string, (p: ProjectData) => ComplianceCheck> = {
             resilience_plan: this.checkResiliencePlan,
@@ -119,15 +106,11 @@ export class ComplianceCheckService {
             schwammstadt: this.checkSchwammstadt,
             dwa_a138: this.checkDwaA138,
             equity: this.checkEquity,
-            hazard_mitigation_plan: this.checkHazardMitigationPlan
+            hazard_mitigation_plan: this.checkResiliencePlan // Alias
         };
 
         const evaluator = evaluators[reqId];
-        if (!evaluator) {
-            return { id: reqId, label: reqId, passed: false, reason: 'Unknown requirement' };
-        }
-
-        return evaluator(project);
+        return evaluator ? evaluator(project) : { id: reqId, label: reqId, passed: false, reason: 'Unknown' };
     }
 
     private checkResiliencePlan(p: ProjectData): ComplianceCheck {
@@ -142,19 +125,12 @@ export class ComplianceCheckService {
     }
 
     private checkBCR(p: ProjectData): ComplianceCheck {
-        const bcrValue = p.bcrValue ?? 0;
-        const passed = (p.hasBCR === true) && bcrValue >= 1.0;
-        return {
-            id: 'bcr',
-            label: 'Cost-Benefit Ratio ≥ 1.0',
-            passed,
-            value: bcrValue,
-            threshold: 1.0,
-            reason: passed ? `BCR ${bcrValue} exceeds threshold` : 'BCR below 1.0'
-        };
+        const b = p.bcrValue ?? 0;
+        const ok = !!p.hasBCR && b >= 1.0;
+        return { id: 'bcr', label: 'BCR', passed: ok, value: b };
     }
 
-    private checkLocalMatch(_p: ProjectData): ComplianceCheck {
+    private checkLocalMatch(): ComplianceCheck {
         return {
             id: 'local_match',
             label: '25% Local Match',
@@ -166,24 +142,12 @@ export class ComplianceCheckService {
 
     private checkWaterQuality(p: ProjectData): ComplianceCheck {
         const hasWQ = (p.phosphorusRemoval_lb_yr ?? 0) > 0 || p.bmps.length > 0;
-        return {
-            id: 'water_quality',
-            label: 'Water Quality Metrics',
-            passed: hasWQ,
-            value: hasWQ ? 'Provided' : 'Missing',
-            reason: hasWQ ? 'Pollutant data enhances application' : 'Add pollutant removal data'
-        };
+        return { id: 'water_quality', label: 'WQ', passed: hasWQ };
     }
 
     private checkPollutantRemoval(p: ProjectData): ComplianceCheck {
-        const hasData = (p.phosphorusRemoval_lb_yr ?? 0) > 0 || (p.nitrogenRemoval_lb_yr ?? 0) > 0 || p.bmps.length > 0;
-        return {
-            id: 'pollutant_removal',
-            label: 'Measurable Pollutant Reduction',
-            passed: hasData,
-            value: hasData ? 'Documented' : 'Required',
-            reason: 'SLAF prioritizes TN/TP removal'
-        };
+        const hasData = (p.phosphorusRemoval_lb_yr ?? 0) > 0 || p.bmps.length > 0;
+        return { id: 'pollutant_removal', label: 'Pollutants', passed: hasData };
     }
 
     private checkChesapeakeWatershed(p: ProjectData): ComplianceCheck {
@@ -201,46 +165,16 @@ export class ComplianceCheckService {
     private checkSchwammstadt(p: ProjectData): ComplianceCheck {
         const retention = p.retention_mm ?? (p.retention_in ? p.retention_in * 25.4 : 0);
         const passed = retention >= 25;
-        return {
-            id: 'schwammstadt',
-            label: 'Schwammstadt Compliance',
-            passed,
-            value: `${retention}mm retention`,
-            threshold: 25,
-            reason: passed ? 'Meets Berlin Sponge City' : 'Increase retention to 25mm+'
-        };
+        return { id: 'schwammstadt', label: 'Schwammstadt', passed, value: `${retention}mm`, threshold: 25 };
     }
 
     private checkDwaA138(p: ProjectData): ComplianceCheck {
-        const hasInfiltration = (p.infiltrationRate_mm_hr ?? 0) >= 10 || p.bmps.length > 0;
-        return {
-            id: 'dwa_a138',
-            label: 'DWA-A 138 Infiltration',
-            passed: hasInfiltration,
-            value: hasInfiltration ? 'Compliant' : 'Required',
-            reason: 'German infiltration standards'
-        };
+        const ok = (p.infiltrationRate_mm_hr ?? 0) >= 10 || p.bmps.length > 0;
+        return { id: 'dwa_a138', label: 'DWA-A 138', passed: ok };
     }
 
-    private checkEquity(_p: ProjectData): ComplianceCheck {
-        return {
-            id: 'equity',
-            label: 'Community Equity Score',
-            passed: false,
-            value: 'Not assessed',
-            reason: 'Add EJScreen data for bonus points'
-        };
-    }
-
-    private checkHazardMitigationPlan(p: ProjectData): ComplianceCheck {
-        const passed = p.hasResiliencePlan === true;
-        return {
-            id: 'hazard_mitigation_plan',
-            label: 'Hazard Mitigation Plan',
-            passed,
-            value: passed ? 'Aligned' : 'Required',
-            reason: 'Must align with FEMA-approved HMP'
-        };
+    private checkEquity(): ComplianceCheck {
+        return { id: 'equity', label: 'Equity', passed: false, reason: 'Pending' };
     }
 
     private getJurisdictionChecks(project: ProjectData): ComplianceCheck[] {
@@ -254,76 +188,61 @@ export class ComplianceCheckService {
     private addFairfaxChecks(p: ProjectData, checks: ComplianceCheck[]): void {
         if (!p.jurisdictionCode.startsWith('US-VA-059')) return;
         const retention = p.retention_in ?? 0;
-        checks.push({
-            id: 'fairfax_pfm',
-            label: 'Fairfax PFM Compliance',
-            passed: retention >= 1.5,
-            value: `${retention}in LID retention`,
-            threshold: 1.5,
-            reason: retention >= 1.5 ? 'Meets Fairfax 1.5" standard' : 'Increase to 1.5" for PFM compliance'
-        });
+        checks.push({ id: 'fairfax_pfm', label: 'Fairfax PFM', passed: retention >= 1.5, value: `${retention}in`, threshold: 1.5 });
     }
 
     private addVirginiaChecks(p: ProjectData, checks: ComplianceCheck[]): void {
         if (!p.jurisdictionCode.startsWith('US-VA')) return;
         const retention = p.retention_in ?? 0;
-        checks.push({
-            id: 'virginia_deq',
-            label: 'Virginia DEQ Standards',
-            passed: retention >= 1.2,
-            value: `${retention}in retention`,
-            threshold: 1.2,
-            reason: retention >= 1.2 ? 'Meets VA DEQ 1.2" standard' : 'Minimum 1.2" required'
-        });
+        checks.push({ id: 'virginia_deq', label: 'VA DEQ', passed: retention >= 1.2, value: `${retention}in`, threshold: 1.2 });
     }
 
     private addBerlinChecks(p: ProjectData, checks: ComplianceCheck[]): void {
-        if (!p.jurisdictionCode.startsWith('DE-BE')) return;
-        const retention = p.retention_mm ?? (p.retention_in ? p.retention_in * 25.4 : 0);
-        checks.push({
-            id: 'berlin_schwammstadt',
-            label: 'Berliner Regenwasseragentur',
-            passed: retention >= 30,
-            value: `${retention}mm retention`,
-            threshold: 30,
-            reason: retention >= 30 ? 'Meets Berlin 30mm standard' : 'Increase to 30mm'
-        });
+        const id = p.jurisdictionCode;
+        if (!id.startsWith('DE-BE')) return;
+        const r = this.getBerlinRetention(p);
+        checks.push({ id: 'berlin_schwammstadt', label: 'Berlin BRW', passed: r >= 30, value: r });
+    }
+
+    private getBerlinRetention(p: ProjectData): number {
+        return p.retention_mm ?? (p.retention_in ? p.retention_in * 25.4 : 0);
     }
 
     private generateSummary(project: ProjectData, checks: ComplianceCheck[]): string {
         const lines: string[] = [];
         this.addJurisdictionSummary(project, checks, lines);
-        this.addTopPassedChecks(checks, lines);
-        this.addTopFailedChecks(checks, lines);
+
+        const otherChecked = checks.filter(c => c.passed && !c.id.includes('fairfax') && !c.id.includes('schwamm'));
+        otherChecked.slice(0, 2).forEach(c => lines.push(`✅ ${c.label} ✓`));
+
+        checks.filter(c => !c.passed).slice(0, 2).forEach(c => lines.push(`⚠️ ${c.label}`));
         return lines.join('\n').trim();
     }
 
     private addJurisdictionSummary(p: ProjectData, checks: ComplianceCheck[], lines: string[]): void {
-        const isFairfax = p.jurisdictionCode.startsWith('US-VA-059');
-        const isBerlin = p.jurisdictionCode.startsWith('DE-BE');
-
-        if (isFairfax) {
-            const pfm = checks.find(c => c.id === 'fairfax_pfm');
-            if (pfm?.passed) lines.push(`✅ Fairfax PFM: ${pfm.value} ✓`);
-        }
-
-        if (isBerlin) {
-            const schwamm = checks.find(c => c.id === 'schwammstadt' || c.id === 'berlin_schwammstadt');
-            if (schwamm?.passed) lines.push(`✅ Schwammstadt compliant: DWA-A138 infiltration ✓`);
-        }
+        const id = p.jurisdictionCode;
+        this.addFairfaxSummary(id, checks, lines);
+        this.addBerlinSummary(id, checks, lines);
     }
 
-    private addTopPassedChecks(checks: ComplianceCheck[], lines: string[]): void {
-        const passed = checks.filter(c => c.passed && !['fairfax_pfm', 'schwammstadt', 'berlin_schwammstadt'].includes(c.id));
-        for (const check of passed.slice(0, 3)) {
-            lines.push(`✅ ${check.label}: ${check.value} ✓`);
-        }
+    private addFairfaxSummary(id: string, checks: ComplianceCheck[], lines: string[]): void {
+        const isFF = id.startsWith('US-VA-059');
+        if (isFF) this.pushCheck(checks, 'fairfax_pfm', 'Fairfax PFM', lines);
     }
 
-    private addTopFailedChecks(checks: ComplianceCheck[], lines: string[]): void {
-        const failed = checks.filter(c => !c.passed);
-        for (const check of failed.slice(0, 2)) {
-            lines.push(`⚠️ ${check.label}: ${check.reason}`);
-        }
+    private pushCheck(checks: ComplianceCheck[], cid: string, label: string, lines: string[]): void {
+        const c = checks.find(x => x.id === cid);
+        if (c?.passed) lines.push(`✅ ${label}: ${c.value} ✓`);
     }
+
+    private addBerlinSummary(id: string, checks: ComplianceCheck[], lines: string[]): void {
+        const isBE = id.startsWith('DE-BE');
+        if (isBE) this.pushBerlin(checks, lines);
+    }
+
+    private pushBerlin(checks: ComplianceCheck[], lines: string[]): void {
+        const s = checks.find(c => c.id === 'schwammstadt' || c.id === 'berlin_schwammstadt');
+        if (s?.passed) lines.push('✅ Schwammstadt: Compliant ✓');
+    }
+
 }

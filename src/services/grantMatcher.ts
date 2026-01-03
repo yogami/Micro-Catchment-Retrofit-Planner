@@ -93,74 +93,101 @@ const GRANT_PROGRAMS: Omit<Grant, 'maxAmountEUR'>[] = [
     },
 ];
 
+function isLatInBerlin(lat: number): boolean {
+    return lat >= 52.3 && lat <= 52.7;
+}
+
+function isLonInBerlin(lon: number): boolean {
+    return lon >= 13.0 && lon <= 13.8;
+}
+
 /**
  * Determine if coordinates are in Berlin
  */
 function isInBerlin(lat: number, lon: number): boolean {
-    // Berlin bounding box (approximate)
-    return lat >= 52.3 && lat <= 52.7 && lon >= 13.0 && lon <= 13.8;
+    return isLatInBerlin(lat) && isLonInBerlin(lon);
+}
+
+function isLatInGermany(lat: number): boolean {
+    return lat >= 47.2 && lat <= 55.1;
+}
+
+function isLonInGermany(lon: number): boolean {
+    return lon >= 5.8 && lon <= 15.1;
 }
 
 /**
  * Determine if coordinates are in Germany (but not Berlin)
  */
 function isInGermany(lat: number, lon: number): boolean {
-    return lat >= 47.2 && lat <= 55.1 && lon >= 5.8 && lon <= 15.1;
+    return isLatInGermany(lat) && isLonInGermany(lon);
+}
+
+function isLatInUSA(lat: number): boolean {
+    return lat >= 24.5 && lat <= 49.5;
+}
+
+function isLonInUSA(lon: number): boolean {
+    return lon >= -125.0 && lon <= -66.0;
 }
 
 /**
  * Determine if coordinates are in the USA
  */
 function isInUSA(lat: number, lon: number): boolean {
-    // Continental US bounding box (approximate)
-    return lat >= 24.5 && lat <= 49.5 && lon >= -125.0 && lon <= -66.0;
+    return isLatInUSA(lat) && isLonInUSA(lon);
+}
+
+function isLatInEU(lat: number): boolean {
+    return lat >= 35.0 && lat <= 71.0;
+}
+
+function isLonInEU(lon: number): boolean {
+    return lon >= -10.0 && lon <= 40.0;
 }
 
 /**
  * Determine if coordinates are in EU
  */
 function isInEU(lat: number, lon: number): boolean {
-    // Very rough EU bounding box
-    return lat >= 35.0 && lat <= 71.0 && lon >= -10.0 && lon <= 40.0;
+    return isLatInEU(lat) && isLonInEU(lon);
+}
+
+function checkRegion(region: string, lat: number, lon: number): boolean {
+    const checkers: Record<string, (lt: number, ln: number) => boolean> = {
+        berlin: isInBerlin,
+        germany: (lt, ln) => isInGermany(lt, ln) || isInBerlin(lt, ln),
+        eu: isInEU,
+        usa: isInUSA
+    };
+    return checkers[region]?.(lat, lon) ?? false;
+}
+
+function checkKfw432(project: ProjectForGrants): boolean {
+    return project.fixes.some(f => f.type === 'rain_garden' && f.size >= 20);
+}
+
+function checkEuHorizon(project: ProjectForGrants): boolean {
+    return project.totalCostEUR >= 50000;
 }
 
 /**
  * Check if project meets grant requirements
  */
 function meetsRequirements(project: ProjectForGrants, grant: Omit<Grant, 'maxAmountEUR'>): boolean {
-    const { latitude, longitude, totalCostEUR, fixes } = project;
+    const { latitude, longitude } = project;
 
-    // Region check
-    switch (grant.region) {
-        case 'berlin':
-            if (!isInBerlin(latitude, longitude)) return false;
-            break;
-        case 'germany':
-            if (!isInGermany(latitude, longitude) && !isInBerlin(latitude, longitude)) return false;
-            break;
-        case 'eu':
-            if (!isInEU(latitude, longitude)) return false;
-            break;
-        case 'usa':
-            if (!isInUSA(latitude, longitude)) return false;
-            break;
+    if (!checkRegion(grant.region, latitude, longitude)) {
+        return false;
     }
 
-    // Specific grant requirements
-    switch (grant.id) {
-        case 'kfw432':
-            // Requires rain garden > 20m²
-            const hasLargeRainGarden = fixes.some(f => f.type === 'rain_garden' && f.size >= 20);
-            if (!hasLargeRainGarden) return false;
-            break;
+    const evaluators: Record<string, (p: ProjectForGrants) => boolean> = {
+        kfw432: checkKfw432,
+        eu_horizon: checkEuHorizon
+    };
 
-        case 'eu_horizon':
-            // Requires project > €50k
-            if (totalCostEUR < 50000) return false;
-            break;
-    }
-
-    return true;
+    const evaluator = evaluators[grant.id];
+    return evaluator ? evaluator(project) : true;
 }
 
 /**

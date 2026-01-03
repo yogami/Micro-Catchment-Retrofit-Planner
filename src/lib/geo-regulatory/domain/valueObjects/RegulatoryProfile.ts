@@ -103,18 +103,21 @@ export interface TaxParameters {
 /**
  * Create a stormwater regulatory profile
  */
-export function createStormwaterProfile(
-    id: string,
-    jurisdictionCode: string,
-    name: string,
-    description: string,
-    parameters: StormwaterParameters,
+export interface StormwaterProfileParams {
+    id: string;
+    jurisdictionCode: string;
+    name: string;
+    description: string;
+    parameters: StormwaterParameters;
     options?: {
         authorityName?: string;
         authorityUrl?: string;
         effectiveDate?: Date;
-    }
-): RegulatoryProfile<StormwaterParameters> {
+    };
+}
+
+export function createStormwaterProfile(args: StormwaterProfileParams): RegulatoryProfile<StormwaterParameters> {
+    const { id, jurisdictionCode, name, description, parameters, options } = args;
     return {
         id,
         jurisdictionCode,

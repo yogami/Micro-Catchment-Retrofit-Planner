@@ -8,7 +8,7 @@
 import jsPDF from 'jspdf';
 import { GRANT_TEMPLATES, type GrantTemplate } from '../../templates/grantTemplates';
 import { GRANT_PROGRAMS, type GrantProgramId } from '../entities/GrantProgram';
-import { ComplianceCheckService, type ProjectData, type ComplianceResult } from './ComplianceCheckService';
+import { ComplianceCheckService, type ProjectData, type ComplianceResult, type ComplianceCheck, type BMPSpec } from './ComplianceCheckService';
 
 export interface GrantApplicationData {
     project: {
@@ -66,7 +66,7 @@ export class GrantPDFService {
             phosphorusRemoval_lb_yr: data.pollutants.TP,
             nitrogenRemoval_lb_yr: data.pollutants.TN,
             infiltrationRate_mm_hr: data.project.infiltrationRate_mm_hr,
-            bmps: data.bmps.map(b => ({ type: b.type as any, area_m2: b.area_m2 }))
+            bmps: data.bmps as BMPSpec[]
         };
 
         // Run compliance check
@@ -101,173 +101,139 @@ export class GrantPDFService {
         const fields: Record<string, string> = {};
         const currency = template.programId === 'BENE2' ? '€' : '$';
 
-        for (const section of template.sections) {
-            for (const field of section.fields) {
-                let value = '';
+        const resolvers: Record<string, (f: { sourceKey?: string; calcFn?: string; staticValue?: string }) => string> = {
+            project: (f) => this.getProjectValue(data.project, f.sourceKey || ''),
+            geo: (f) => this.getGeoValue(data.geo, f.sourceKey || ''),
+            calc: (f) => this.calculateValue(f.calcFn || '', data, calcs, currency),
+            compliance: (f) => this.getComplianceValue(compliance, f.sourceKey || ''),
+            static: (f) => f.staticValue || ''
+        };
 
-                switch (field.source) {
-                    case 'project':
-                        value = this.getProjectValue(data.project, field.sourceKey || '');
-                        break;
-                    case 'geo':
-                        if (field.sourceKey === 'hierarchy') {
-                            value = data.geo.hierarchy.join(' → ');
-                        } else {
-                            value = (data.geo as any)[field.sourceKey || ''] || '';
-                        }
-                        break;
-                    case 'calc':
-                        value = this.calculateValue(field.calcFn || '', data, calcs, currency);
-                        break;
-                    case 'compliance':
-                        const check = compliance.checks.find(c => c.id === field.sourceKey);
-                        value = check ? (check.passed ? '✓ ' + (check.value || 'Compliant') : '✗ ' + check.reason) : 'N/A';
-                        break;
-                    case 'static':
-                        value = field.staticValue || '';
-                        break;
-                }
-
-                fields[field.id] = value;
-            }
-        }
+        template.sections.forEach(s => s.fields.forEach(f => {
+            fields[f.id] = resolvers[f.source]?.(f) || '';
+        }));
 
         return fields;
     }
 
-    private getProjectValue(project: any, key: string): string {
-        const value = project[key];
-        if (value === undefined) return 'N/A';
+    private getGeoValue(geo: GrantApplicationData['geo'], key: string): string {
+        if (key === 'hierarchy') return geo.hierarchy.join(' → ');
+        const val = (geo as Record<string, unknown>)[key];
+        return val ? String(val) : '';
+    }
 
-        if (key === 'area_m2') return `${value}m²`;
-        if (key === 'retention_in') return `${value}"`;
-        if (key === 'retention_mm') return `${value}mm`;
-        if (key === 'peakReduction_percent') return `${value}%`;
-        if (key === 'bcrValue') return value.toFixed(1);
+    private getComplianceValue(compliance: ComplianceResult, key: string): string {
+        const c = compliance.checks.find(ch => ch.id === key);
+        if (!c) return 'N/A';
+        return this.formatCheck(c);
+    }
 
-        return String(value);
+    private formatCheck(c: ComplianceCheck): string {
+        return c.passed ? this.formatOk(c) : `✗ ${c.reason || 'Failed'}`;
+    }
+
+    private formatOk(c: ComplianceCheck): string {
+        return `✓ ${c.value || 'Ok'}`;
+    }
+
+    private getProjectValue(project: GrantApplicationData['project'], key: string): string {
+        const val = (project as Record<string, unknown>)[key];
+        if (val === undefined) return 'N/A';
+        return this.formatProjectVal(key, val);
+    }
+
+    private formatProjectVal(key: string, val: unknown): string {
+        const units: Record<string, string> = {
+            area_m2: 'm²', retention_in: '"', retention_mm: 'mm', peakReduction_percent: '%'
+        };
+        const u = units[key];
+        if (u) return `${val}${u}`;
+        return key === 'bcrValue' ? (val as number).toFixed(1) : String(val);
     }
 
     private calculateValue(
-        calcFn: string,
+        calc: string,
         data: GrantApplicationData,
         calcs: { totalCost: number; federalShare: number; localMatch: number },
         currency: string
     ): string {
-        const formatCurrency = (n: number) => `${currency}${n.toLocaleString()}`;
-
-        if (calcFn.includes('area * 150') || calcFn.includes('area * 120')) {
-            return `${formatCurrency(calcs.totalCost)} (${data.project.area_m2}m² @ ${currency}${calcFn.includes('120') ? '120' : '150'}/m²)`;
-        }
-        if (calcFn.includes('totalCost * 0.75')) {
-            return formatCurrency(calcs.federalShare);
-        }
-        if (calcFn.includes('totalCost * 0.50')) {
-            return formatCurrency(calcs.totalCost * 0.5);
-        }
-        if (calcFn.includes('totalCost * 0.60')) {
-            return formatCurrency(calcs.totalCost * 0.6);
-        }
-        if (calcFn.includes('totalCost * 0.25') || calcFn.includes('totalCost * 0.40')) {
-            return formatCurrency(calcs.localMatch);
-        }
-        if (calcFn.includes('pollutants.TP')) {
-            return `${data.pollutants.TP.toFixed(2)} lb/yr`;
-        }
-        if (calcFn.includes('pollutants.TN')) {
-            return `${data.pollutants.TN.toFixed(1)} lb/yr`;
-        }
-        if (calcFn.includes('pollutants.sediment')) {
-            return `${data.pollutants.sediment}% reduction`;
-        }
-
-        return 'N/A';
+        if (calc.includes('area *')) return `${currency}${calcs.totalCost.toLocaleString()} (${data.project.area_m2}m²)`;
+        return this.calculateShares(calc, calcs, currency, data);
     }
 
-    private createPDF(
-        template: GrantTemplate,
-        fields: Record<string, string>,
-        compliance: ComplianceResult,
-        grantId: GrantProgramId
-    ): jsPDF {
+    private calculateShares(
+        calc: string,
+        calcs: { totalCost: number; federalShare: number; localMatch: number },
+        curr: string,
+        data: GrantApplicationData
+    ): string {
+        if (calc.includes('federalShare')) return `${curr}${calcs.federalShare.toLocaleString()}`;
+        if (calc.includes('localMatch')) return `${curr}${calcs.localMatch.toLocaleString()}`;
+        return this.calculatePollutant(calc, data.pollutants);
+    }
+
+    private calculatePollutant(calc: string, p: GrantApplicationData['pollutants']): string {
+        if (calc.includes('TP')) return `${p.TP.toFixed(2)} lb/yr`;
+        return this.calculateMorePollutants(calc, p);
+    }
+
+    private calculateMorePollutants(calc: string, p: GrantApplicationData['pollutants']): string {
+        if (calc.includes('TN')) return `${p.TN.toFixed(1)} lb/yr`;
+        return this.calculateSediment(calc, p.sediment);
+    }
+
+    private calculateSediment(calc: string, sediment: number): string {
+        return calc.includes('sediment') ? `${sediment}% reduction` : 'N/A';
+    }
+
+    private createPDF(template: GrantTemplate, fields: Record<string, string>, compliance: ComplianceResult, grantId: GrantProgramId): jsPDF {
         const doc = new jsPDF();
-        const program = GRANT_PROGRAMS[grantId];
-        let y = 20;
-
-        // Header
-        doc.setFontSize(18);
-        doc.setFont('helvetica', 'bold');
-        doc.text(template.title, 105, y, { align: 'center' });
-        y += 10;
-
-        // Program info
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`${program.name} | Federal: ${program.federalMatch_percent}% | Local: ${program.localMatch_percent}%`, 105, y, { align: 'center' });
-        y += 15;
-
-        // Sections
-        for (const section of template.sections) {
-            // Section header
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'bold');
-            doc.setDrawColor(0, 100, 200);
-            doc.line(15, y, 195, y);
-            y += 6;
-            doc.text(section.title, 15, y);
-            y += 8;
-
-            // Fields as table
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-
-            for (const field of section.fields) {
-                const value = fields[field.id] || 'N/A';
-
-                // Label
-                doc.setFont('helvetica', 'bold');
-                doc.text(field.label + ':', 20, y);
-
-                // Value
-                doc.setFont('helvetica', 'normal');
-                doc.text(value, 80, y);
-
-                y += 6;
-
-                // Page break if needed
-                if (y > 270) {
-                    doc.addPage();
-                    y = 20;
-                }
-            }
-
-            y += 5;
-        }
-
-        // Compliance Summary
-        y += 5;
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.setDrawColor(0, 150, 0);
-        doc.line(15, y, 195, y);
-        y += 6;
-        doc.text(`Compliance Score: ${compliance.score}% ${compliance.eligible ? '(ELIGIBLE)' : '(NOT ELIGIBLE)'}`, 15, y);
-        y += 10;
-
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        const summaryLines = compliance.summary.split('\n');
-        for (const line of summaryLines) {
-            doc.text(line, 20, y);
-            y += 5;
-        }
-
-        // Footer
-        doc.setFontSize(8);
-        doc.setTextColor(128, 128, 128);
-        doc.text(`Generated by Microcatchment Planner | ${new Date().toLocaleDateString()}`, 105, 285, { align: 'center' });
-
+        let y = this.drawTemplateHeader(doc, template, GRANT_PROGRAMS[grantId]);
+        y = this.drawTemplateSections(doc, template, fields, y);
+        this.drawTemplateCompliance(doc, compliance, y);
+        this.drawTemplateFooter(doc);
         return doc;
+    }
+
+    private drawTemplateHeader(doc: jsPDF, template: GrantTemplate, program: { name: string, federalMatch_percent: number }): number {
+        doc.setFontSize(18); doc.setFont('helvetica', 'bold');
+        doc.text(template.title, 105, 20, { align: 'center' });
+        doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+        doc.text(`${program.name} | Fed: ${program.federalMatch_percent}%`, 105, 30, { align: 'center' });
+        return 45;
+    }
+
+    private drawTemplateSections(doc: jsPDF, template: GrantTemplate, fields: Record<string, string>, startY: number): number {
+        let y = startY;
+        template.sections.forEach(s => {
+            doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+            doc.line(15, y, 195, y); y += 6;
+            doc.text(s.title, 15, y); y += 8;
+            s.fields.forEach(f => {
+                doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+                doc.text(f.label + ':', 20, y);
+                doc.setFont('helvetica', 'normal');
+                doc.text(fields[f.id] || 'N/A', 80, y);
+                y += 6;
+                if (y > 270) { doc.addPage(); y = 20; }
+            });
+            y += 5;
+        });
+        return y;
+    }
+
+    private drawTemplateCompliance(doc: jsPDF, compliance: ComplianceResult, y: number): void {
+        doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+        doc.line(15, y, 195, y); y += 6;
+        doc.text(`Score: ${compliance.score}% ${compliance.eligible ? '(ELIGIBLE)' : ''}`, 15, y);
+        y += 10;
+        doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+        compliance.summary.split('\n').forEach(line => { doc.text(line, 20, y); y += 5; });
+    }
+
+    private drawTemplateFooter(doc: jsPDF): void {
+        doc.setFontSize(8); doc.setTextColor(128);
+        doc.text(`Generated ${new Date().toLocaleDateString()}`, 105, 285, { align: 'center' });
     }
 
     /**

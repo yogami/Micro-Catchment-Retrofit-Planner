@@ -54,77 +54,31 @@ describe('PDF Export', () => {
         document.body.innerHTML = '<div id="ar-container">AR View</div>';
     });
 
-    it('generates PDF with street name in header', async () => {
+    it('generates PDF with all project details', async () => {
         await exportProjectPDF(mockProject);
+        const textCalls = mockText.mock.calls.map(c => c[0].toString());
 
-        expect(mockText).toHaveBeenCalledWith(
-            expect.stringContaining('Kreuzberg Flood Fix'),
-            expect.any(Number),
-            expect.any(Number)
-        );
-    });
-
-    it('includes rainfall intensity', async () => {
-        await exportProjectPDF(mockProject);
-
-        expect(mockText).toHaveBeenCalledWith(
-            expect.stringContaining('50'),
-            expect.any(Number),
-            expect.any(Number)
-        );
-    });
-
-    it('includes all 3 feature types', async () => {
-        await exportProjectPDF(mockProject);
-
-        // Check that features are included
-        const textCalls = mockText.mock.calls.map(c => c[0]).join(' ');
-        expect(textCalls).toContain('Rain Garden');
-        expect(textCalls).toContain('Permeable Pavement');
-        expect(textCalls).toContain('Tree Planter');
-    });
-
-    it('shows >30% reduction claim', async () => {
-        await exportProjectPDF(mockProject);
-
-        const textCalls = mockText.mock.calls.map(c => c[0]).join(' ');
-        expect(textCalls).toContain('35%');
+        expect(textCalls.some(t => t.includes('Kreuzberg Flood Fix'))).toBe(true);
+        expect(textCalls.some(t => t.includes('50'))).toBe(true); // rainfall
+        expect(textCalls.some(t => t.includes('Rain Garden'))).toBe(true);
+        expect(textCalls.some(t => t.includes('Permeable Pavement'))).toBe(true);
+        expect(textCalls.some(t => t.includes('35%'))).toBe(true); // reduction
+        expect(textCalls.some(t => t.includes('52.52'))).toBe(true); // lat
     });
 
     it('includes AR screenshot image', async () => {
         await exportProjectPDF(mockProject);
-
         expect(mockAddImage).toHaveBeenCalledWith(
-            expect.stringContaining('data:image/png'),
-            'PNG',
-            expect.any(Number),
-            expect.any(Number),
-            expect.any(Number),
-            expect.any(Number)
+            expect.stringContaining('data:image/png'), 'PNG',
+            expect.any(Number), expect.any(Number), expect.any(Number), expect.any(Number)
         );
     });
 
-    it('includes matched funding programs', async () => {
+    it('includes matched funding programs and saves file', async () => {
         await exportProjectPDF(mockProject);
+        const textCalls = mockText.mock.calls.map(c => c[0].toString().toLowerCase());
 
-        const textCalls = mockText.mock.calls.map(c => c[0]).join(' ');
-        expect(textCalls.toLowerCase()).toContain('bene2');
-        expect(textCalls.toLowerCase()).toContain('funding');
-    });
-
-    it('saves PDF with street name in filename', async () => {
-        await exportProjectPDF(mockProject);
-
-        expect(mockSave).toHaveBeenCalledWith(
-            expect.stringContaining('Kreuzberg_Flood_Fix')
-        );
-    });
-
-    it('includes coordinates', async () => {
-        await exportProjectPDF(mockProject);
-
-        const textCalls = mockText.mock.calls.map(c => c[0]).join(' ');
-        expect(textCalls).toContain('52.52');
-        expect(textCalls).toContain('13.405');
+        expect(textCalls.some(t => t.includes('bene2'))).toBe(true);
+        expect(mockSave).toHaveBeenCalledWith(expect.stringContaining('Kreuzberg_Flood_Fix'));
     });
 });

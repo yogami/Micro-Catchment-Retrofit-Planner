@@ -17,11 +17,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const BATCH_SIZE = 128;
-const EPOCHS = 5; // Reduced for quick verification
+const EPOCHS = 5;
 const LEARNING_RATE = 0.001;
 const MODEL_SAVE_PATH = `file://${path.join(__dirname, '../public/models/pinn_runoff')}`;
 
-// Helper: Normalize inputs based on MinMax
 const NORMALIZATION = {
     x: { min: 0, max: 200 },
     t: { min: 0, max: 120 },
@@ -41,57 +40,36 @@ function normalizeInput(inputs: number[]): number[] {
 }
 
 function normalizeOutput(output: number): number {
-    const MAX_Q = 200;
-    return output / MAX_Q;
+    return output / 200;
 }
 
 async function train() {
     console.log('--- PINN Training Started ---');
-
-    // Force CPU backend to avoid native binding issues
     await tf.setBackend('cpu');
     console.log(`Using backend: ${tf.getBackend()}`);
 
-    // 1. Create Model
     const model = await createPINNModel();
-    model.compile({
-        optimizer: tf.train.adam(LEARNING_RATE),
-        loss: 'meanSquaredError',
-        metrics: ['mse'],
-    });
+    model.compile({ optimizer: tf.train.adam(LEARNING_RATE), loss: 'meanSquaredError', metrics: ['mse'] });
 
-    // 2. Generate Data
     console.log('Generating training data...');
     const dataset = generateTrainingData();
-    const { train, val } = splitDataset(dataset.samples, 0.9);
+    const { train: trainingSet, val } = splitDataset(dataset.samples, 0.9);
 
-    const trainInputs = tf.tensor2d(train.map(s => normalizeInput(s.inputs)));
-    const trainLabels = tf.tensor2d(train.map(s => [normalizeOutput(s.output)]));
+    const trainInputs = tf.tensor2d(trainingSet.map(s => normalizeInput(s.inputs)));
+    const trainLabels = tf.tensor2d(trainingSet.map(s => [normalizeOutput(s.output)]));
 
     const valInputs = tf.tensor2d(val.map(s => normalizeInput(s.inputs)));
     const valLabels = tf.tensor2d(val.map(s => [normalizeOutput(s.output)]));
 
-    console.log(`Training on ${train.length} samples...`);
+    console.log(`Training on ${trainingSet.length} samples...`);
 
-    // 3. Train
     await model.fit(trainInputs, trainLabels, {
-        batchSize: BATCH_SIZE,
-        epochs: EPOCHS,
-        validationData: [valInputs, valLabels],
-        shuffle: true,
-        callbacks: {
-            onEpochEnd: (epoch, logs) => {
-                if (epoch % 10 === 0) {
-                    console.log(`Epoch ${epoch}: loss=${logs?.loss.toFixed(6)}, val_loss=${logs?.val_loss.toFixed(6)}`);
-                }
-            }
-        }
+        batchSize: BATCH_SIZE, epochs: EPOCHS, validationData: [valInputs, valLabels], shuffle: true,
+        callbacks: { onEpochEnd: (e, l) => { if (e % 10 === 0) console.log(`E ${e}: loss=${l?.loss.toFixed(4)}`); } }
     });
 
-    // 4. Save Model
     console.log(`Saving model to ${MODEL_SAVE_PATH}...`);
     await model.save(MODEL_SAVE_PATH);
-
     console.log('--- PINN Training Complete ---');
 }
 

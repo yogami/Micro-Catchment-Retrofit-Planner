@@ -65,50 +65,46 @@ export class DiscoveryService {
      * @param domain - Regulatory domain (e.g., "stormwater", "building-code")
      * @returns DiscoveryResult with the applicable profile
      */
-    async discover<TParams = Record<string, unknown>>(
-        lat: number,
-        lon: number,
-        domain: string
-    ): Promise<DiscoveryResult<TParams>> {
-        // Step 1: Reverse geocode to get jurisdiction chain
+    async discover<TParams = Record<string, unknown>>(lat: number, lon: number, domain: string): Promise<DiscoveryResult<TParams>> {
         const chain = await this.geocodingPort.reverseGeocode(lat, lon);
+        const codes = getCascadeCodes(chain);
+        const result = await this.searchChain<TParams>(codes, domain, chain);
+        if (result) return result;
 
-        // Step 2: Get cascade codes (most specific first)
-        const cascadeCodes = getCascadeCodes(chain);
-        const fallbackPath: string[] = [];
-
-        // Step 3: Iterate and find first matching profile
-        for (const code of cascadeCodes) {
-            fallbackPath.push(code);
-
-            const profile = await this.profileRepository.findByJurisdictionAndDomain(
-                code,
-                domain
-            );
-
-            if (profile) {
-                const isExactMatch = code === cascadeCodes[0];
-                const appliedJurisdiction = findInChain(chain, code);
-
-                return {
-                    status: isExactMatch ? 'discovered' : 'fallback',
-                    profile: profile as RegulatoryProfile<TParams>,
-                    appliedJurisdiction: appliedJurisdiction!,
-                    chain,
-                    fallbackPath
-                };
-            }
-        }
-
-        // Step 4: No match found, return global default
-        const defaultProfile = await this.profileRepository.getDefault(domain);
-
+        const def = await this.profileRepository.getDefault(domain);
         return {
             status: 'default',
-            profile: defaultProfile as RegulatoryProfile<TParams>,
+            profile: def as RegulatoryProfile<TParams>,
             appliedJurisdiction: createJurisdiction('supranational', 'Global', 'GLOBAL'),
             chain,
-            fallbackPath
+            fallbackPath: codes
+        };
+    }
+
+    private async searchChain<TParams>(codes: string[], domain: string, chain: JurisdictionChain): Promise<DiscoveryResult<TParams> | null> {
+        const path: string[] = [];
+        for (const code of codes) {
+            path.push(code);
+            const p = await this.profileRepository.findByJurisdictionAndDomain(code, domain);
+            if (p) return this.buildResult({ p: p as RegulatoryProfile<TParams>, code, top: codes[0], chain, path });
+        }
+        return null;
+    }
+
+    private buildResult<TParams>(args: {
+        p: RegulatoryProfile<TParams>,
+        code: string,
+        top: string,
+        chain: JurisdictionChain,
+        path: string[]
+    }): DiscoveryResult<TParams> {
+        const { p, code, top, chain, path } = args;
+        return {
+            status: code === top ? 'discovered' : 'fallback',
+            profile: p,
+            appliedJurisdiction: findInChain(chain, code)!,
+            chain,
+            fallbackPath: path
         };
     }
 }

@@ -67,7 +67,7 @@ export const REGULATION_PROFILES: Record<string, RegulationProfile> = {
         description: 'California 85th percentile storm event capture.',
         designDepth_mm: 19.05, // 0.75 inches
         designIntensity_mm_hr: 40.0,
-        rvFormula: (_i) => 0.9,
+        rvFormula: () => 0.9,
         units: 'imperial',
         authorityUrl: 'https://www.casqa.org/'
     },
@@ -102,25 +102,40 @@ export const REGULATION_PROFILES: Record<string, RegulationProfile> = {
     }
 };
 
+interface BBox {
+    minLat: number;
+    maxLat: number;
+    minLon: number;
+    maxLon: number;
+}
+
+const REGION_BOUNDS: Record<string, BBox> = {
+    VA: { minLat: 37.0, maxLat: 40.0, minLon: -78.0, maxLon: -75.0 },
+    NYC: { minLat: 40.5, maxLat: 41.0, minLon: -74.3, maxLon: -73.7 },
+    LDN: { minLat: 51.3, maxLat: 51.7, minLon: -0.5, maxLon: 0.3 },
+    CA: { minLat: 32.5, maxLat: 38.0, minLon: -124.5, maxLon: -116.0 },
+    BE: { minLat: 52.3, maxLat: 52.7, minLon: 13.0, maxLon: 13.7 }
+};
+
+function isInBBox(lat: number, lon: number, bbox: BBox): boolean {
+    if (lat <= bbox.minLat) return false;
+    if (lat >= bbox.maxLat) return false;
+    return isLonInBBox(lon, bbox);
+}
+
+function isLonInBBox(lon: number, bbox: BBox): boolean {
+    return lon > bbox.minLon && lon < bbox.maxLon;
+}
+
 /**
  * Geographic lookup for regulation profile with expanded global regions
  */
 export function getProfileForLocation(lat: number, lon: number): RegulationProfile {
-    // US East Coast (VA/DC/MD)
-    if (lat > 37.0 && lat < 40.0 && lon > -78.0 && lon < -75.0) return REGULATION_PROFILES.VA;
-
-    // New York City
-    if (lat > 40.5 && lat < 41.0 && lon > -74.3 && lon < -73.7) return REGULATION_PROFILES.NYC;
-
-    // London
-    if (lat > 51.3 && lat < 51.7 && lon > -0.5 && lon < 0.3) return REGULATION_PROFILES.LDN;
-
-    // California (SoCal/Bay Area focus)
-    if ((lat > 32.5 && lat < 38.0) && (lon > -124.5 && lon < -116.0)) return REGULATION_PROFILES.CA;
-
-    // Berlin
-    if (lat > 52.3 && lat < 52.7 && lon > 13.0 && lon < 13.7) return REGULATION_PROFILES.BE;
-
+    for (const [key, bbox] of Object.entries(REGION_BOUNDS)) {
+        if (isInBBox(lat, lon, bbox)) {
+            return REGULATION_PROFILES[key];
+        }
+    }
     return REGULATION_PROFILES.DEFAULT;
 }
 export type SurfaceType = keyof typeof RUNOFF_COEFFICIENTS;
@@ -265,18 +280,34 @@ export function computeTreePlanterCount(
  * @param totalArea_m2 - Total impervious area
  * @returns Reduction percentage (0-100)
  */
+interface FixLike {
+    size?: number;
+    Size?: string;
+    reductionRate?: number;
+    'Reduction Rate'?: string;
+}
+
+function parseFixSize(fix: FixLike): number {
+    if (fix.size !== undefined) return fix.size;
+    return parseFloat((fix.Size || '0').replace('m²', ''));
+}
+
+function parseFixRate(fix: FixLike): number {
+    if (fix.reductionRate !== undefined) return fix.reductionRate;
+    return parseFloat(fix['Reduction Rate'] || '0');
+}
+
+/**
+ * Calculate total runoff reduction from installed fixes
+ */
 export function calculateTotalReduction(
-    fixes: Array<{ Size?: string; 'Reduction Rate'?: string; size?: number; reductionRate?: number }>,
+    fixes: FixLike[],
     totalArea_m2: number
 ): number {
     let totalCapture = 0;
-
     for (const fix of fixes) {
-        const size = fix.size ?? parseFloat((fix.Size || '0').replace('m²', ''));
-        const rate = fix.reductionRate ?? parseFloat(fix['Reduction Rate'] || '0');
-        totalCapture += size * rate;
+        totalCapture += parseFixSize(fix) * parseFixRate(fix);
     }
-
     return (totalCapture / totalArea_m2) * 100;
 }
 
@@ -287,51 +318,19 @@ export function calculateTotalReduction(
  * @param rainfall_mm_hr - Design rainfall intensity
  * @returns Array of suggested fixes with sizing
  */
+
+/**
+ * Suggest green infrastructure fixes for a given impervious area
+ */
 export function suggestGreenFixes(
-    area_m2: number,
-    rainfall: number = 50,
-    mode: 'rate' | 'volume' = 'rate',
-    profile: RegulationProfile = REGULATION_PROFILES.DEFAULT
+    area_m2: number
 ): GreenFix[] {
-    // Standard recommendations based on area
-    const fixes: GreenFix[] = [];
-    const rv = profile.rvFormula(100);
 
-    // If in volume mode, we might want to size specifically for the WQv
-    const designVolume = mode === 'volume'
-        ? computeWQv(rainfall, area_m2, rv)
-        : computePeakRunoff(rainfall, area_m2, rv) * 3600; // Simulated volume for 1hr
-
-    void designVolume; // For now keeping the heuristic sizing, but marking volume for future refinement
-
-    // Rain garden: 20% of area for sidewalk edges
-    const rainGardenSize = Math.round(area_m2 * 0.2);
-    fixes.push({
-        type: 'rain_garden',
-        size: rainGardenSize,
-        reductionRate: 0.4,
-        placement: 'Sidewalk edge'
-    });
-
-    // Permeable pavement: 50% of parking areas
-    const permeableSize = Math.round(area_m2 * 0.5);
-    fixes.push({
-        type: 'permeable_pavement',
-        size: permeableSize,
-        reductionRate: 0.7,
-        placement: 'Parking area'
-    });
-
-    // Tree planters: 10m² each along road verge
-    const planterCount = 3;
-    fixes.push({
-        type: 'tree_planter',
-        size: 10 * planterCount,
-        reductionRate: 0.25,
-        placement: 'Road verge'
-    });
-
-    return fixes;
+    return [
+        { type: 'rain_garden', size: Math.round(area_m2 * 0.2), reductionRate: 0.4, placement: 'Sidewalk edge' },
+        { type: 'permeable_pavement', size: Math.round(area_m2 * 0.5), reductionRate: 0.7, placement: 'Parking area' },
+        { type: 'tree_planter', size: 30, reductionRate: 0.25, placement: 'Road verge' }
+    ];
 }
 
 /**

@@ -30,37 +30,45 @@ export const openMeteoClient = {
     /**
      * Fetch hourly rainfall data for specific coordinates from Open-Meteo API
      */
-    async fetchRainfall(lat: number = DEFAULT_LAT, lon: number = DEFAULT_LON): Promise<RainfallData> {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation&timezone=auto`;
+    async fetchRainfall(lat?: number, lon?: number): Promise<RainfallData> {
+        const coords = this.getCoords(lat, lon);
+        return this.tryFetch(coords.lat, coords.lon);
+    },
 
+    getCoords(lat?: number, lon?: number) {
+        return { lat: lat ?? DEFAULT_LAT, lon: lon ?? DEFAULT_LON };
+    },
+
+    async tryFetch(lat: number, lon: number): Promise<RainfallData> {
         try {
-            const response = await fetch(url);
-
-            if (!response.ok) {
-                throw new Error(`API error: ${response.status}`);
-            }
-
-            const data: OpenMeteoResponse = await response.json();
-
-            const result: RainfallData = {
-                precipitation: data.hourly.precipitation,
-                times: data.hourly.time,
-                units: data.hourly_units.precipitation,
-                fromCache: false,
-            };
-
-            // Cache the result
-            this.cacheData(result);
-
-            return result;
+            return await this.fetchFromAPI(lat, lon);
         } catch (error) {
-            // Try to use cached data on failure
-            const cached = this.getCachedData();
-            if (cached) {
-                return { ...cached.data, fromCache: true, cachedAt: cached.timestamp };
-            }
-            throw error;
+            return this.handleFetchError(error as Error);
         }
+    },
+
+    async fetchFromAPI(lat: number, lon: number): Promise<RainfallData> {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation&timezone=auto`;
+        const response = await fetch(url);
+
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+        const data: OpenMeteoResponse = await response.json();
+        const result: RainfallData = {
+            precipitation: data.hourly.precipitation,
+            times: data.hourly.time,
+            units: data.hourly_units.precipitation,
+            fromCache: false,
+        };
+
+        this.cacheData(result);
+        return result;
+    },
+
+    handleFetchError(error: Error): RainfallData {
+        const c = this.getCachedData();
+        if (!c) throw error;
+        return { ...c.data, fromCache: true, cachedAt: c.timestamp };
     },
 
     /**
