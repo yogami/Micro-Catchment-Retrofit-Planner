@@ -109,196 +109,221 @@ export class ComplianceCheckService {
         project: ProjectData,
         _grantId: GrantProgramId
     ): ComplianceCheck {
-        switch (reqId) {
-            case 'resilience_plan':
-                return {
-                    id: 'resilience_plan',
-                    label: 'FEMA-Approved Resilience Plan',
-                    passed: project.hasResiliencePlan === true,
-                    value: project.hasResiliencePlan ? 'Yes' : 'No',
-                    reason: project.hasResiliencePlan ? 'Plan approved' : 'Resilience plan required'
-                };
+        const evaluators: Record<string, (p: ProjectData) => ComplianceCheck> = {
+            resilience_plan: this.checkResiliencePlan,
+            bcr: this.checkBCR,
+            local_match: this.checkLocalMatch,
+            water_quality: this.checkWaterQuality,
+            pollutant_removal: this.checkPollutantRemoval,
+            chesapeake_watershed: this.checkChesapeakeWatershed,
+            schwammstadt: this.checkSchwammstadt,
+            dwa_a138: this.checkDwaA138,
+            equity: this.checkEquity,
+            hazard_mitigation_plan: this.checkHazardMitigationPlan
+        };
 
-            case 'bcr':
-                const bcrPassed = (project.hasBCR === true) && (project.bcrValue ?? 0) >= 1.0;
-                return {
-                    id: 'bcr',
-                    label: 'Cost-Benefit Ratio ≥ 1.0',
-                    passed: bcrPassed,
-                    value: project.bcrValue ?? 0,
-                    threshold: 1.0,
-                    reason: bcrPassed ? `BCR ${project.bcrValue} exceeds threshold` : 'BCR below 1.0'
-                };
-
-            case 'local_match':
-                return {
-                    id: 'local_match',
-                    label: '25% Local Match',
-                    passed: true, // Assuming local match is available
-                    value: '25%',
-                    reason: 'Local match commitment required'
-                };
-
-            case 'water_quality':
-                const hasWQ = (project.phosphorusRemoval_lb_yr ?? 0) > 0 || project.bmps.length > 0;
-                return {
-                    id: 'water_quality',
-                    label: 'Water Quality Metrics',
-                    passed: hasWQ,
-                    value: hasWQ ? 'Provided' : 'Missing',
-                    reason: hasWQ ? 'Pollutant data enhances application' : 'Add pollutant removal data'
-                };
-
-            case 'pollutant_removal':
-                const hasPollutantData = (project.phosphorusRemoval_lb_yr ?? 0) > 0 ||
-                    (project.nitrogenRemoval_lb_yr ?? 0) > 0 ||
-                    project.bmps.length > 0;
-                return {
-                    id: 'pollutant_removal',
-                    label: 'Measurable Pollutant Reduction',
-                    passed: hasPollutantData,
-                    value: hasPollutantData ? 'Documented' : 'Required',
-                    reason: 'SLAF prioritizes TN/TP removal'
-                };
-
-            case 'chesapeake_watershed':
-                const inChesapeake = project.jurisdictionCode.startsWith('US-VA') ||
-                    project.jurisdictionCode.startsWith('US-MD') ||
-                    project.jurisdictionCode.startsWith('US-PA');
-                return {
-                    id: 'chesapeake_watershed',
-                    label: 'Chesapeake Bay Watershed',
-                    passed: inChesapeake,
-                    value: inChesapeake ? 'Yes' : 'No',
-                    reason: 'Priority for Chesapeake projects'
-                };
-
-            case 'schwammstadt':
-                const retention_mm = project.retention_mm ?? (project.retention_in ? project.retention_in * 25.4 : 0);
-                const schwammPassed = retention_mm >= 25; // 25mm minimum for Sponge City
-                return {
-                    id: 'schwammstadt',
-                    label: 'Schwammstadt Compliance',
-                    passed: schwammPassed,
-                    value: `${retention_mm}mm retention`,
-                    threshold: 25,
-                    reason: schwammPassed ? 'Meets Berlin Sponge City' : 'Increase retention to 25mm+'
-                };
-
-            case 'dwa_a138':
-                const hasInfiltration = (project.infiltrationRate_mm_hr ?? 0) >= 10 || project.bmps.length > 0;
-                return {
-                    id: 'dwa_a138',
-                    label: 'DWA-A 138 Infiltration',
-                    passed: hasInfiltration,
-                    value: hasInfiltration ? 'Compliant' : 'Required',
-                    reason: 'German infiltration standards'
-                };
-
-            case 'equity':
-                return {
-                    id: 'equity',
-                    label: 'Community Equity Score',
-                    passed: false, // Would need census data
-                    value: 'Not assessed',
-                    reason: 'Add EJScreen data for bonus points'
-                };
-
-            case 'hazard_mitigation_plan':
-                return {
-                    id: 'hazard_mitigation_plan',
-                    label: 'Hazard Mitigation Plan',
-                    passed: project.hasResiliencePlan === true,
-                    value: project.hasResiliencePlan ? 'Aligned' : 'Required',
-                    reason: 'Must align with FEMA-approved HMP'
-                };
-
-            default:
-                return {
-                    id: reqId,
-                    label: reqId,
-                    passed: false,
-                    reason: 'Unknown requirement'
-                };
+        const evaluator = evaluators[reqId];
+        if (!evaluator) {
+            return { id: reqId, label: reqId, passed: false, reason: 'Unknown requirement' };
         }
+
+        return evaluator(project);
+    }
+
+    private checkResiliencePlan(p: ProjectData): ComplianceCheck {
+        const passed = p.hasResiliencePlan === true;
+        return {
+            id: 'resilience_plan',
+            label: 'FEMA-Approved Resilience Plan',
+            passed,
+            value: passed ? 'Yes' : 'No',
+            reason: passed ? 'Plan approved' : 'Resilience plan required'
+        };
+    }
+
+    private checkBCR(p: ProjectData): ComplianceCheck {
+        const bcrValue = p.bcrValue ?? 0;
+        const passed = (p.hasBCR === true) && bcrValue >= 1.0;
+        return {
+            id: 'bcr',
+            label: 'Cost-Benefit Ratio ≥ 1.0',
+            passed,
+            value: bcrValue,
+            threshold: 1.0,
+            reason: passed ? `BCR ${bcrValue} exceeds threshold` : 'BCR below 1.0'
+        };
+    }
+
+    private checkLocalMatch(_p: ProjectData): ComplianceCheck {
+        return {
+            id: 'local_match',
+            label: '25% Local Match',
+            passed: true,
+            value: '25%',
+            reason: 'Local match commitment required'
+        };
+    }
+
+    private checkWaterQuality(p: ProjectData): ComplianceCheck {
+        const hasWQ = (p.phosphorusRemoval_lb_yr ?? 0) > 0 || p.bmps.length > 0;
+        return {
+            id: 'water_quality',
+            label: 'Water Quality Metrics',
+            passed: hasWQ,
+            value: hasWQ ? 'Provided' : 'Missing',
+            reason: hasWQ ? 'Pollutant data enhances application' : 'Add pollutant removal data'
+        };
+    }
+
+    private checkPollutantRemoval(p: ProjectData): ComplianceCheck {
+        const hasData = (p.phosphorusRemoval_lb_yr ?? 0) > 0 || (p.nitrogenRemoval_lb_yr ?? 0) > 0 || p.bmps.length > 0;
+        return {
+            id: 'pollutant_removal',
+            label: 'Measurable Pollutant Reduction',
+            passed: hasData,
+            value: hasData ? 'Documented' : 'Required',
+            reason: 'SLAF prioritizes TN/TP removal'
+        };
+    }
+
+    private checkChesapeakeWatershed(p: ProjectData): ComplianceCheck {
+        const codes = ['US-VA', 'US-MD', 'US-PA'];
+        const inChesapeake = codes.some(c => p.jurisdictionCode.startsWith(c));
+        return {
+            id: 'chesapeake_watershed',
+            label: 'Chesapeake Bay Watershed',
+            passed: inChesapeake,
+            value: inChesapeake ? 'Yes' : 'No',
+            reason: 'Priority for Chesapeake projects'
+        };
+    }
+
+    private checkSchwammstadt(p: ProjectData): ComplianceCheck {
+        const retention = p.retention_mm ?? (p.retention_in ? p.retention_in * 25.4 : 0);
+        const passed = retention >= 25;
+        return {
+            id: 'schwammstadt',
+            label: 'Schwammstadt Compliance',
+            passed,
+            value: `${retention}mm retention`,
+            threshold: 25,
+            reason: passed ? 'Meets Berlin Sponge City' : 'Increase retention to 25mm+'
+        };
+    }
+
+    private checkDwaA138(p: ProjectData): ComplianceCheck {
+        const hasInfiltration = (p.infiltrationRate_mm_hr ?? 0) >= 10 || p.bmps.length > 0;
+        return {
+            id: 'dwa_a138',
+            label: 'DWA-A 138 Infiltration',
+            passed: hasInfiltration,
+            value: hasInfiltration ? 'Compliant' : 'Required',
+            reason: 'German infiltration standards'
+        };
+    }
+
+    private checkEquity(_p: ProjectData): ComplianceCheck {
+        return {
+            id: 'equity',
+            label: 'Community Equity Score',
+            passed: false,
+            value: 'Not assessed',
+            reason: 'Add EJScreen data for bonus points'
+        };
+    }
+
+    private checkHazardMitigationPlan(p: ProjectData): ComplianceCheck {
+        const passed = p.hasResiliencePlan === true;
+        return {
+            id: 'hazard_mitigation_plan',
+            label: 'Hazard Mitigation Plan',
+            passed,
+            value: passed ? 'Aligned' : 'Required',
+            reason: 'Must align with FEMA-approved HMP'
+        };
     }
 
     private getJurisdictionChecks(project: ProjectData): ComplianceCheck[] {
         const checks: ComplianceCheck[] = [];
-
-        // Fairfax County specific
-        if (project.jurisdictionCode.startsWith('US-VA-059')) {
-            const retention = project.retention_in ?? 0;
-            checks.push({
-                id: 'fairfax_pfm',
-                label: 'Fairfax PFM Compliance',
-                passed: retention >= 1.5,
-                value: `${retention}in LID retention`,
-                threshold: 1.5,
-                reason: retention >= 1.5 ? 'Meets Fairfax 1.5" standard' : 'Increase to 1.5" for PFM compliance'
-            });
-        }
-
-        // Virginia state
-        if (project.jurisdictionCode.startsWith('US-VA')) {
-            const retention = project.retention_in ?? 0;
-            checks.push({
-                id: 'virginia_deq',
-                label: 'Virginia DEQ Standards',
-                passed: retention >= 1.2,
-                value: `${retention}in retention`,
-                threshold: 1.2,
-                reason: retention >= 1.2 ? 'Meets VA DEQ 1.2" standard' : 'Minimum 1.2" required'
-            });
-        }
-
-        // Berlin specific
-        if (project.jurisdictionCode.startsWith('DE-BE')) {
-            const retention = project.retention_mm ?? (project.retention_in ? project.retention_in * 25.4 : 0);
-            checks.push({
-                id: 'berlin_schwammstadt',
-                label: 'Berliner Regenwasseragentur',
-                passed: retention >= 30,
-                value: `${retention}mm retention`,
-                threshold: 30,
-                reason: retention >= 30 ? 'Meets Berlin 30mm standard' : 'Increase to 30mm'
-            });
-        }
-
+        this.addFairfaxChecks(project, checks);
+        this.addVirginiaChecks(project, checks);
+        this.addBerlinChecks(project, checks);
         return checks;
     }
 
+    private addFairfaxChecks(p: ProjectData, checks: ComplianceCheck[]): void {
+        if (!p.jurisdictionCode.startsWith('US-VA-059')) return;
+        const retention = p.retention_in ?? 0;
+        checks.push({
+            id: 'fairfax_pfm',
+            label: 'Fairfax PFM Compliance',
+            passed: retention >= 1.5,
+            value: `${retention}in LID retention`,
+            threshold: 1.5,
+            reason: retention >= 1.5 ? 'Meets Fairfax 1.5" standard' : 'Increase to 1.5" for PFM compliance'
+        });
+    }
+
+    private addVirginiaChecks(p: ProjectData, checks: ComplianceCheck[]): void {
+        if (!p.jurisdictionCode.startsWith('US-VA')) return;
+        const retention = p.retention_in ?? 0;
+        checks.push({
+            id: 'virginia_deq',
+            label: 'Virginia DEQ Standards',
+            passed: retention >= 1.2,
+            value: `${retention}in retention`,
+            threshold: 1.2,
+            reason: retention >= 1.2 ? 'Meets VA DEQ 1.2" standard' : 'Minimum 1.2" required'
+        });
+    }
+
+    private addBerlinChecks(p: ProjectData, checks: ComplianceCheck[]): void {
+        if (!p.jurisdictionCode.startsWith('DE-BE')) return;
+        const retention = p.retention_mm ?? (p.retention_in ? p.retention_in * 25.4 : 0);
+        checks.push({
+            id: 'berlin_schwammstadt',
+            label: 'Berliner Regenwasseragentur',
+            passed: retention >= 30,
+            value: `${retention}mm retention`,
+            threshold: 30,
+            reason: retention >= 30 ? 'Meets Berlin 30mm standard' : 'Increase to 30mm'
+        });
+    }
+
     private generateSummary(project: ProjectData, checks: ComplianceCheck[]): string {
-        const passed = checks.filter(c => c.passed);
-        const failed = checks.filter(c => !c.passed);
+        const lines: string[] = [];
+        this.addJurisdictionSummary(project, checks, lines);
+        this.addTopPassedChecks(checks, lines);
+        this.addTopFailedChecks(checks, lines);
+        return lines.join('\n').trim();
+    }
 
-        let summary = '';
+    private addJurisdictionSummary(p: ProjectData, checks: ComplianceCheck[], lines: string[]): void {
+        const isFairfax = p.jurisdictionCode.startsWith('US-VA-059');
+        const isBerlin = p.jurisdictionCode.startsWith('DE-BE');
 
-        // Add jurisdiction-specific summary
-        if (project.jurisdictionCode.startsWith('US-VA-059')) {
-            const pfmCheck = checks.find(c => c.id === 'fairfax_pfm');
-            if (pfmCheck?.passed) {
-                summary += `✅ Fairfax PFM: ${pfmCheck.value} ✓\n`;
-            }
+        if (isFairfax) {
+            const pfm = checks.find(c => c.id === 'fairfax_pfm');
+            if (pfm?.passed) lines.push(`✅ Fairfax PFM: ${pfm.value} ✓`);
         }
 
-        if (project.jurisdictionCode.startsWith('DE-BE')) {
-            const schwammCheck = checks.find(c => c.id === 'schwammstadt' || c.id === 'berlin_schwammstadt');
-            if (schwammCheck?.passed) {
-                summary += `✅ Schwammstadt compliant: DWA-A138 infiltration ✓\n`;
-            }
+        if (isBerlin) {
+            const schwamm = checks.find(c => c.id === 'schwammstadt' || c.id === 'berlin_schwammstadt');
+            if (schwamm?.passed) lines.push(`✅ Schwammstadt compliant: DWA-A138 infiltration ✓`);
         }
+    }
 
-        // Add passed checks
+    private addTopPassedChecks(checks: ComplianceCheck[], lines: string[]): void {
+        const passed = checks.filter(c => c.passed && !['fairfax_pfm', 'schwammstadt', 'berlin_schwammstadt'].includes(c.id));
         for (const check of passed.slice(0, 3)) {
-            summary += `✅ ${check.label}: ${check.value} ✓\n`;
+            lines.push(`✅ ${check.label}: ${check.value} ✓`);
         }
+    }
 
-        // Add failed checks
+    private addTopFailedChecks(checks: ComplianceCheck[], lines: string[]): void {
+        const failed = checks.filter(c => !c.passed);
         for (const check of failed.slice(0, 2)) {
-            summary += `⚠️ ${check.label}: ${check.reason}\n`;
+            lines.push(`⚠️ ${check.label}: ${check.reason}`);
         }
-
-        return summary.trim();
     }
 }
