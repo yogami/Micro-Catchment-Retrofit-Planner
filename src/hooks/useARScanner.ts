@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { VoxelManager } from '../utils/ar/VoxelManager';
 import { SfMOptimizer, type OptimizationResult } from '../utils/ar/SfMOptimizer';
 import { useAuth } from '../contexts/AuthContext';
+import { parseArea } from '../utils/units';
 import { useUnitStore } from '../store/useUnitStore';
 import { openMeteoClient } from '../services/openMeteoClient';
 import {
@@ -103,14 +104,15 @@ export function useARScanner() {
      * Manual tape measure validation
      * Compares app measurement to field tape measure
      */
-    const handleValidateTape = useCallback((tapeValueM2: number) => {
-        if (state.detectedArea === null || tapeValueM2 <= 0) return;
+    const handleValidateTape = useCallback((tapeValue: number) => {
+        if (state.detectedArea === null || tapeValue <= 0) return;
+        const tapeValueM2 = parseArea(tapeValue, unitSystem);
         const errorPercent = Math.abs(state.detectedArea - tapeValueM2) / tapeValueM2 * 100;
         update({
             tapeValidation: tapeValueM2,
             validationError: Math.round(errorPercent * 100) / 100 // 2 decimal places
         });
-    }, [state.detectedArea, update]);
+    }, [state.detectedArea, unitSystem, update]);
 
     return {
         ...state, user, unitSystem, toggleUnitSystem, update,

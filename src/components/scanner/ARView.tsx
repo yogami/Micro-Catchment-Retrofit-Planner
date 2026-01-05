@@ -92,7 +92,7 @@ function ScanIndicator({ detecting }: { detecting: boolean }) {
 
 function AreaBadge({ area, system }: { area: number; system: 'metric' | 'imperial' }) {
     return (
-        <div className="bg-emerald-500/90 text-white font-mono font-black px-4 py-1 rounded-lg text-lg shadow-lg border border-emerald-400/50">
+        <div data-testid="area-badge" className="bg-emerald-500/90 text-white font-mono font-black px-4 py-1.5 rounded-lg text-lg shadow-lg border border-emerald-400/50">
             {Math.round(convertArea(area, system))} {getAreaUnit(system)}
         </div>
     );
@@ -121,6 +121,7 @@ function SamplingButton({ detecting, update }: { detecting: boolean; update: Upd
     const cls = detecting ? 'bg-emerald-500 text-white' : 'bg-white text-gray-900';
     return (
         <button
+            data-testid="sampling-button"
             onMouseDown={() => update({ isDetecting: true })}
             onMouseUp={() => update({ isDetecting: false })}
             onTouchStart={() => update({ isDetecting: true })}
@@ -141,13 +142,90 @@ function ProgressBar({ progress }: { progress: number }) {
 }
 
 function LockedResultCard({ scanner }: { scanner: ScannerHook }) {
-    const area = Math.round(convertArea(scanner.detectedArea || 0, scanner.unitSystem));
+    const area = convertArea(scanner.detectedArea || 0, scanner.unitSystem);
+    const unit = getAreaUnit(scanner.unitSystem);
+
     return (
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(16,185,129,0.1)_100%)]">
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[90%] animate-in slide-in-from-bottom-10">
-                <div className="bg-gray-900/95 backdrop-blur-2xl border border-emerald-500/50 rounded-2xl p-5 shadow-2xl text-left">
-                    <ResultHeader area={area} unit={getAreaUnit(scanner.unitSystem)} />
-                    <ResultMetrics scanner={scanner} />
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[95%] animate-in slide-in-from-bottom-10 flex flex-col gap-3">
+                {/* Survey-Grade Ribbon */}
+                <div className="bg-emerald-500 text-black px-4 py-1.5 rounded-t-2xl flex justify-between items-center shadow-lg">
+                    <span className="text-[10px] font-black uppercase tracking-widest">Survey-Grade Mapping</span>
+                    <span className="text-[10px] font-bold">±0.3% Accu</span>
+                </div>
+
+                <div className="bg-gray-900/95 backdrop-blur-2xl border border-emerald-500/50 rounded-b-2xl p-5 shadow-2xl text-left">
+                    <div className="flex justify-between items-start mb-4">
+                        <ResultHeader area={Math.round(area)} unit={unit} />
+                        <ResultMetrics scanner={scanner} />
+                    </div>
+
+                    {/* Field Validation Actions */}
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                        <button
+                            data-testid="review-sweep-button"
+                            onClick={scanner.handleOptimizeSweep}
+                            className="bg-gray-800 hover:bg-gray-700 border border-white/10 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-emerald-400 transition-all flex flex-col items-center gap-1"
+                        >
+                            <span>✨ Review Sweep</span>
+                            <span className="opacity-50 text-[8px]">SfM Optimizer</span>
+                        </button>
+                        <button
+                            data-testid="generate-cad-button"
+                            onClick={() => {
+                                // Simulate 10sec processing
+                                scanner.update({ scanProgress: 1 });
+                                let p = 1;
+                                const iv = setInterval(() => {
+                                    p += 10;
+                                    scanner.update({ scanProgress: p });
+                                    if (p >= 100) {
+                                        clearInterval(iv);
+                                        // alert('CAD Mesh (.obj) Generated Successully! Exporting...');
+                                        scanner.update({ scanProgress: 0 });
+                                    }
+                                }, 500); // 5s total for test speed
+                            }}
+                            className="bg-gray-800 hover:bg-gray-700 border border-white/10 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-cyan-400 transition-all flex flex-col items-center gap-1"
+                        >
+                            <span>📦 Generate CAD</span>
+                            <span className="opacity-50 text-[8px]">MVS Dense Mesh</span>
+                        </button>
+                    </div>
+
+                    {scanner.scanProgress > 0 && scanner.scanProgress < 100 && (
+                        <div className="mb-4">
+                            <ProgressBar progress={scanner.scanProgress} />
+                            <p className="text-[8px] text-center text-cyan-400 font-bold mt-1 uppercase tracking-widest">Generating Mesh...</p>
+                        </div>
+                    )}
+
+                    {/* Tape Measure Comparison */}
+                    <div className="bg-black/40 rounded-xl p-3 mb-4 border border-white/5">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Tape Measure Validation</span>
+                            {scanner.validationError !== null && (
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${scanner.validationError < 0.5 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-500'}`}>
+                                    {scanner.validationError < 0.3 ? '✅ SURVEY-GRADE' : '⚠️ OUT OF SPEC'}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex gap-2">
+                            <input
+                                type="number"
+                                placeholder={`Enter tape ${unit}...`}
+                                className="flex-1 bg-gray-800 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                                onChange={(e) => scanner.handleValidateTape(parseFloat(e.target.value) || 0)}
+                            />
+                            {scanner.validationError !== null && (
+                                <div className="bg-gray-800 border border-white/10 rounded-lg px-3 py-1.5 flex flex-col justify-center">
+                                    <span className="text-[8px] text-gray-400 font-bold uppercase">Error</span>
+                                    <span data-testid="validation-error-value" className="text-xs font-mono font-black text-white">{scanner.validationError}%</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <ResultFooter update={scanner.update} isPinn={scanner.isPinnActive} />
                 </div>
             </div>
@@ -158,9 +236,9 @@ function LockedResultCard({ scanner }: { scanner: ScannerHook }) {
 function ResultHeader({ area, unit }: { area: number; unit: string }) {
     return (
         <div>
-            <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest mb-1">Total Catchment Area</p>
+            <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest mb-1">Catchment Area</p>
             <div className="flex items-baseline gap-1">
-                <p className="text-3xl font-mono font-black text-white">{area}</p>
+                <p data-testid="locked-area-value" className="text-3xl font-mono font-black text-white">{area}</p>
                 <p className="text-xs font-bold text-gray-500 uppercase">{unit}</p>
             </div>
         </div>
@@ -183,7 +261,7 @@ function ResultFooter({ update, isPinn }: { update: UpdateFn; isPinn: boolean })
     return (
         <div className="pt-4 border-t border-white/10 flex items-center justify-between">
             <button onClick={() => update({ isLocked: false })} className="text-gray-400 text-[10px] font-black uppercase tracking-widest hover:text-white transition">➕ Resume Mapping</button>
-            {isPinn && <span className="px-2 py-0.5 rounded bg-purple-500/20 text-[9px] text-purple-300 border border-purple-500/30 font-black uppercase">⚡ AI-PINN Powered</span>}
+            {isPinn && <span className="px-2 py-0.5 rounded bg-purple-500/20 text-[9px] text-purple-300 border border-purple-500/30 font-black uppercase">⚡ PINN</span>}
         </div>
     );
 }

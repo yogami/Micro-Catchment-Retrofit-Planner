@@ -24,6 +24,13 @@ export function convertArea(value: number, to: UnitSystem): number {
 }
 
 /**
+ * Convert area back to metric from target unit system
+ */
+export function parseArea(value: number, from: UnitSystem): number {
+    return from === 'imperial' ? value / M2_TO_SQFT : value;
+}
+
+/**
  * Convert intensity (rainfall) based on target unit system
  */
 export function convertRainfall(value: number, to: UnitSystem): number {
