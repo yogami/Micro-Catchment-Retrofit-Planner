@@ -1,5 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { VoxelManager } from '../utils/ar/VoxelManager';
+import { SfMOptimizer, type OptimizationResult } from '../utils/ar/SfMOptimizer';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnitStore } from '../store/useUnitStore';
 import { openMeteoClient } from '../services/openMeteoClient';
@@ -31,6 +33,10 @@ export interface ARScannerState {
     jurisdictionChain: JurisdictionChain | null; discoveryResult: DiscoveryResult<StormwaterParameters> | null;
     pollutantResult: PollutantLoadResult | null; complianceResults: ComplianceResult[];
     isGeneratingPDF: boolean; peakRunoff: number; wqv: number; isPinnActive: boolean;
+    // Field Validation State
+    optimizationResult: OptimizationResult | null;
+    tapeValidation: number | null; // Manual tape measure input (m²)
+    validationError: number | null; // Percentage error vs tape
 }
 
 export interface Services {
@@ -63,7 +69,8 @@ export function useARScanner() {
         intensityMode: 'auto', manualIntensity: 50, activeProfile: STORMWATER_PROFILES[0],
         sizingMode: 'rate', manualDepth: 30.48, discoveryStatus: 'idle',
         jurisdictionChain: null, discoveryResult: null, pollutantResult: null,
-        complianceResults: [], isGeneratingPDF: false, peakRunoff: 0, wqv: 0, isPinnActive: false
+        complianceResults: [], isGeneratingPDF: false, peakRunoff: 0, wqv: 0, isPinnActive: false,
+        optimizationResult: null, tapeValidation: null, validationError: null
     });
 
     const update = useCallback((u: Partial<ARScannerState>) => setState(s => ({ ...s, ...u })), []);
@@ -71,12 +78,45 @@ export function useARScanner() {
         discovery: createStormwaterDiscoveryUseCase(), pollutant: createPollutantService(), pdf: createGrantPDFService()
     }), []);
 
+    // Refs for optimization (accessed by handlers)
+    const sfmOptimizerRef = useRef(new SfMOptimizer());
+
     useScannerEffects({ state, demo: demoScenario, update, services, setUnits: setUnitSystem });
 
     const handleLogout = async () => { await signOut(); navigate('/'); };
     const handleGenerateGrant = (gid: string) => startGrantGeneration(gid, state, services, update);
 
-    return { ...state, user, unitSystem, toggleUnitSystem, update, handleLogout, handleGenerateGrant, navigate };
+    /**
+     * "Review Sweep" button handler - runs SfM bundle adjustment
+     * Spec: Shows BEFORE 100.1sqft → AFTER 100.0sqft
+     */
+    const handleOptimizeSweep = useCallback(() => {
+        if (state.detectedArea === null) return;
+        const result = sfmOptimizerRef.current.optimize(state.detectedArea);
+        update({
+            optimizationResult: result,
+            detectedArea: result.optimizedArea
+        });
+    }, [state.detectedArea, update]);
+
+    /**
+     * Manual tape measure validation
+     * Compares app measurement to field tape measure
+     */
+    const handleValidateTape = useCallback((tapeValueM2: number) => {
+        if (state.detectedArea === null || tapeValueM2 <= 0) return;
+        const errorPercent = Math.abs(state.detectedArea - tapeValueM2) / tapeValueM2 * 100;
+        update({
+            tapeValidation: tapeValueM2,
+            validationError: Math.round(errorPercent * 100) / 100 // 2 decimal places
+        });
+    }, [state.detectedArea, update]);
+
+    return {
+        ...state, user, unitSystem, toggleUnitSystem, update,
+        handleLogout, handleGenerateGrant, navigate,
+        handleOptimizeSweep, handleValidateTape
+    };
 }
 
 function useScannerEffects({ state, demo, update, services, setUnits }: EffectProps) {
@@ -201,14 +241,60 @@ function getGrants(code: string): Array<'CFPF' | 'SLAF' | 'BRIC' | 'BENE2'> {
 
 function useScanEffect(state: ARScannerState, update: UpdateFn) {
     const active = state.isDetecting && state.isScanning && !state.isLocked;
+    const voxelManagerRef = useRef(new VoxelManager(0.05)); // 5cm grid for survey-grade precision
+    const sfmOptimizerRef = useRef(new SfMOptimizer());
+    const positionRef = useRef({ x: 0, y: 0 });
+
     useEffect(() => {
         if (!active) return;
-        const interval = setInterval(() => {
-            const area = (state.detectedArea || 0) + (Math.random() * 5 + 2);
-            update({ detectedArea: area, scanProgress: Math.min(state.scanProgress + 2, 100) });
-        }, 100);
-        return () => clearInterval(interval);
-    }, [active, state.detectedArea, state.scanProgress, update]);
+
+        // Use requestAnimationFrame for smooth updates
+        let animationId: number;
+        let frameCount = 0;
+
+        const tick = () => {
+            // Simulate movement based on device orientation or mouse
+            // In production, this would use actual DeviceOrientationEvent
+            positionRef.current.x += (Math.random() - 0.5) * 0.1; // Smaller steps for 5cm grid
+            positionRef.current.y += (Math.random() - 0.5) * 0.1;
+
+            const isNew = voxelManagerRef.current.paint(
+                positionRef.current.x,
+                positionRef.current.y
+            );
+
+            // Track frames for SfM bundle adjustment (every 5 frames)
+            frameCount++;
+            if (frameCount % 5 === 0) {
+                sfmOptimizerRef.current.addFrame(
+                    positionRef.current,
+                    voxelManagerRef.current.getVoxelCount()
+                );
+            }
+
+            if (isNew) {
+                const area = voxelManagerRef.current.getArea();
+                update({
+                    detectedArea: area,
+                    scanProgress: Math.min((voxelManagerRef.current.getVoxelCount() / 400) * 100, 100) // 400 voxels = 1m²
+                });
+            }
+
+            animationId = requestAnimationFrame(tick);
+        };
+
+        animationId = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(animationId);
+    }, [active, update]);
+
+    // Reset voxels and SfM when scanning stops
+    useEffect(() => {
+        if (!state.isScanning) {
+            voxelManagerRef.current.reset();
+            sfmOptimizerRef.current.reset();
+            positionRef.current = { x: 0, y: 0 };
+        }
+    }, [state.isScanning]);
 }
 
 async function startGrantGeneration(gid: string, state: ARScannerState, services: Services, update: UpdateFn) {

@@ -42,14 +42,19 @@ module.exports = {
         '!src/contexts/*.tsx',
         '!src/store/*.ts',
         // Exclude index/barrel files
-        '!src/lib/**/index.ts'
+        '!src/lib/**/index.ts',
+        // Exclude files requiring external services (integration tests)
+        '!src/services/projectService.ts',
+        '!src/services/supabaseClient.ts',
+        '!src/ml/pinnTrainer.ts',
+        '!src/lib/geo-regulatory/adapters/NominatimGeocodingAdapter.ts'
     ],
     coverageThreshold: {
         global: {
             branches: 50,
             functions: 75,
-            lines: 80,
-            statements: 80
+            lines: 85,
+            statements: 85
         }
     }
 };
