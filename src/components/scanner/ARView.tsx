@@ -1,6 +1,9 @@
 import { useRef, useEffect } from 'react';
 import { useARScanner, type UpdateFn } from '../../hooks/useARScanner';
 import { convertArea, getAreaUnit, convertFlow, getFlowUnit, convertVolume, getVolumeUnit } from '../../utils/units';
+import { useCoverageMode } from '../../contexts/FeatureFlagContext';
+import { CoverageHeatmap } from './coverage/CoverageHeatmap';
+import { useSpatialCoverage } from '../../hooks/useSpatialCoverage';
 
 type ScannerHook = ReturnType<typeof useARScanner>;
 
@@ -41,11 +44,28 @@ function CameraError({ error }: { error: string }) {
 }
 
 function ScannerUI({ scanner }: { scanner: ScannerHook }) {
+    const coverageMode = useCoverageMode();
+    const coverage = useSpatialCoverage();
+
+    // Sync coverage detection with scanner detection state
+    useEffect(() => {
+        coverage.setActive(scanner.isDetecting && scanner.isScanning && !scanner.isLocked);
+    }, [scanner.isDetecting, scanner.isScanning, scanner.isLocked, coverage]);
+
     return (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
             <Reticle active={scanner.isDetecting} locked={scanner.isLocked} />
             <OverlayContent scanner={scanner} />
             <ScannerControlsContainer scanner={scanner} />
+
+            {/* Phase 1: Coverage Heatmap (behind feature flag) */}
+            {coverageMode === 'heatmap' && scanner.isScanning && !scanner.isLocked && (
+                <CoverageHeatmap
+                    voxels={coverage.voxels}
+                    coveragePercent={coverage.stats?.coveragePercent ?? null}
+                    onFinish={() => scanner.update({ isLocked: true })}
+                />
+            )}
         </div>
     );
 }

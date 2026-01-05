@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthProvider';
+import { FeatureFlagProvider } from './contexts/FeatureFlagContext';
 import { useAuth } from './contexts/AuthContext';
 import { LandingPage } from './components/LandingPage';
 import { ARScanner } from './components/ARScanner';
@@ -54,9 +55,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <FeatureFlagProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </FeatureFlagProvider>
     </BrowserRouter>
   );
 }
