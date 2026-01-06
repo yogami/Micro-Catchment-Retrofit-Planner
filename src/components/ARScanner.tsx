@@ -5,8 +5,12 @@ import { ScannerHeader } from './scanner/ScannerHeader';
 import { OnboardingView } from './scanner/OnboardingView';
 import { ARView } from './scanner/ARView';
 import { AnalysisPanel } from './scanner/AnalysisPanel';
+import React from 'react';
 
 type ScannerHook = ReturnType<typeof useARScanner>;
+
+const MemoScannerHeader = React.memo(ScannerHeader);
+const MemoOnboardingView = React.memo(OnboardingView);
 
 export function ARScanner() {
     const scanner = useARScanner();
@@ -15,7 +19,7 @@ export function ARScanner() {
     return (
         <div className="min-h-screen bg-gray-900 text-white" data-jurisdiction-code={scanner.activeProfile.jurisdictionCode}>
             {showDemo && <DemoOverlay onComplete={completeDemo} onSkip={skipDemo} />}
-            <ScannerHeader scanner={scanner} />
+            <MemoScannerHeader scanner={scanner} />
             <ScannerMain scanner={scanner} />
         </div>
     );
@@ -30,7 +34,7 @@ function ScannerMain({ scanner }: { scanner: ScannerHook }) {
 }
 
 function ScannerBody({ scanner }: { scanner: ScannerHook }) {
-    if (!scanner.isScanning) return <OnboardingView scanner={scanner} />;
+    if (!scanner.isScanning) return <MemoOnboardingView scanner={scanner} />;
     return <ScanningInterface scanner={scanner} />;
 }
 

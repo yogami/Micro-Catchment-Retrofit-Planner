@@ -82,8 +82,13 @@ export class CoverageSession {
      * Get current coverage statistics
      */
     getStats(): CoverageStats {
+        const voxelsInside = this._boundary
+            ? Array.from(this.coveredVoxels.values()).filter(v =>
+                this._boundary!.contains(v.worldX, v.worldY))
+            : Array.from(this.coveredVoxels.values());
+
         return createCoverageStats({
-            voxelCount: this.coveredVoxels.size,
+            voxelCount: voxelsInside.length,
             voxelSize: this._voxelSize,
             boundaryArea: this._boundary?.area ?? null
         });

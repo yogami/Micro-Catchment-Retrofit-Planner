@@ -37,4 +37,27 @@ describe('SLAF Compliance', () => {
         const result = service.calculateRemoval({ bmpType: 'rain_garden', area_m2: 50, imperviousPercent: 100, annualRainfall_mm: 1100 });
         expect(result.phosphorus_lb_yr).toBeGreaterThan(0.001);
     });
+
+    it('getSLAFSummary returns correct summary', () => {
+        const input = {
+            area_m2: 100, imperviousPercent: 85, annualRainfall_mm: 1000,
+            bmps: [{ type: 'rain_garden', area_m2: 20 } as any]
+        };
+        const summary = service.getSLAFSummary(input);
+        expect(summary.totalPhosphorusRemoved_lb_yr).toBeGreaterThan(0);
+        expect(summary.meetsSLAFThreshold).toBeDefined();
+    });
+});
+
+describe('Error Handling', () => {
+    it('throws for unknown BMP type', () => {
+        expect(() => {
+            service.calculateRemoval({
+                bmpType: 'unknown_bmp' as any,
+                area_m2: 10,
+                imperviousPercent: 100,
+                annualRainfall_mm: 1000
+            });
+        }).toThrow('Unknown BMP type');
+    });
 });

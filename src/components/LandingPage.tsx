@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -6,8 +6,13 @@ export function LandingPage() {
     const { user } = useAuth();
     const navigate = useNavigate();
 
+    useEffect(() => {
+        if (user) {
+            navigate('/scanner');
+        }
+    }, [user, navigate]);
+
     if (user) {
-        navigate('/scanner');
         return null;
     }
 
@@ -132,7 +137,7 @@ function useAuthAction() {
 }
 
 function DemoButton({ label, onClick }: { label: string; onClick: () => void }) {
-    return <button type="button" onClick={onClick} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs hover:bg-white/20 transition">{label}</button>;
+    return <button type="button" data-testid={`demo-button-${label.replace(/[^a-zA-Z]/g, '').toLowerCase()}`} onClick={onClick} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs hover:bg-white/20 transition">{label}</button>;
 }
 
 function Tagline() {

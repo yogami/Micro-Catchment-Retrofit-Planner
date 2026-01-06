@@ -1,75 +1,42 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext } from 'react';
 import type { ReactNode } from 'react';
-import {
-    type FeatureFlags,
-    type CoverageMode,
-    defaultFlags,
-    loadFeatureFlags,
-    resolveCoverageMode
-} from '../config/featureFlags';
 
 /**
- * Feature Flag Context
+ * Coverage Mode Context
  * 
- * Provides feature flags to the entire app tree with runtime update support.
+ * Feature flags have been absorbed. Coverage mode is now always 'guided'.
+ * However, we still support 'heatmap' as a fallback or explicit override via localStorage for testing.
  */
 
-interface FeatureFlagContextValue {
-    flags: FeatureFlags;
+export type CoverageMode = 'guided' | 'heatmap';
+
+interface CoverageModeContextValue {
     coverageMode: CoverageMode;
-    setFlag: (key: keyof FeatureFlags, value: boolean) => void;
 }
 
-const FeatureFlagContext = createContext<FeatureFlagContextValue>({
-    flags: defaultFlags,
-    coverageMode: 'none',
-    setFlag: () => { },
+const CoverageModeContext = createContext<CoverageModeContextValue>({
+    coverageMode: 'guided',
 });
 
-export function FeatureFlagProvider({ children }: { children: ReactNode }) {
-    const [flags, setFlags] = useState<FeatureFlags>(defaultFlags);
-
-    useEffect(() => {
-        setFlags(loadFeatureFlags());
-    }, []);
-
-    const setFlag = (key: keyof FeatureFlags, value: boolean) => {
-        setFlags(prev => {
-            const next = { ...prev, [key]: value };
-            // Persist to localStorage for runtime toggling
-            if (typeof localStorage !== 'undefined') {
-                localStorage.setItem(key, String(value));
-            }
-            return next;
-        });
-    };
-
-    const coverageMode = resolveCoverageMode(flags);
-
+export function CoverageModeProvider({ children }: { children: ReactNode }) {
     return (
-        <FeatureFlagContext.Provider value={{ flags, coverageMode, setFlag }}>
+        <CoverageModeContext.Provider value={{ coverageMode: 'guided' }}>
             {children}
-        </FeatureFlagContext.Provider>
+        </CoverageModeContext.Provider>
     );
 }
 
 /**
- * Hook to access feature flags
- */
-export function useFeatureFlags(): FeatureFlags {
-    return useContext(FeatureFlagContext).flags;
-}
-
-/**
- * Hook to get the resolved coverage mode
+ * Hook to get the coverage mode
  */
 export function useCoverageMode(): CoverageMode {
-    return useContext(FeatureFlagContext).coverageMode;
+    if (typeof window !== 'undefined' && localStorage.getItem('COVERAGE_HEATMAP') === 'true') {
+        return 'heatmap';
+    }
+    return 'guided';
 }
 
-/**
- * Hook to toggle a feature flag at runtime
- */
-export function useSetFeatureFlag() {
-    return useContext(FeatureFlagContext).setFlag;
-}
+// Legacy exports for compatibility during migration
+export const useFeatureFlags = () => ({ COVERAGE_HEATMAP: true, GUIDED_COVERAGE: true });
+export const useSetFeatureFlag = () => () => { };
+export const FeatureFlagProvider = CoverageModeProvider;

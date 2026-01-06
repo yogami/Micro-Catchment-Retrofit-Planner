@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
     CoverageSession,
     Boundary,
@@ -43,7 +43,10 @@ export interface CoverageActions {
  * Wraps the spatial-coverage microservice for React use.
  * Provides automatic painting when active via requestAnimationFrame.
  */
-export function useSpatialCoverage(voxelSize: number = DEFAULT_VOXEL_SIZE) {
+export function useSpatialCoverage(
+    voxelSize: number = DEFAULT_VOXEL_SIZE,
+    externalPosition?: { x: number; y: number }
+) {
     const sessionRef = useRef(new CoverageSession('react-session', voxelSize));
     const positionRef = useRef({ x: 0, y: 0 });
     const [state, setState] = useState<CoverageState>({
@@ -54,7 +57,16 @@ export function useSpatialCoverage(voxelSize: number = DEFAULT_VOXEL_SIZE) {
         position: { x: 0, y: 0 }
     });
 
-    // Update state from session
+    // Sync position ref with external position if provided
+    useEffect(() => {
+        if (externalPosition) {
+            positionRef.current = externalPosition;
+            // DO NOT sync to state here, as it causes infinite rerenders 
+            // the parent already has this position state.
+        }
+    }, [externalPosition]);
+
+    // Update state from session (only syncs voxels and stats)
     const syncState = useCallback(() => {
         const session = sessionRef.current;
         setState(prev => ({
@@ -62,13 +74,17 @@ export function useSpatialCoverage(voxelSize: number = DEFAULT_VOXEL_SIZE) {
             voxels: session.getVoxels(),
             stats: session.getStats(),
             boundary: session.boundary,
-            position: { ...positionRef.current }
+            // Only update position in state if WE are the one simulating it
+            position: !externalPosition ? { ...positionRef.current } : prev.position
         }));
-    }, []);
+    }, [externalPosition]);
 
     // Actions
     const setActive = useCallback((active: boolean) => {
-        setState(prev => ({ ...prev, isActive: active }));
+        setState(prev => {
+            if (prev.isActive === active) return prev;
+            return { ...prev, isActive: active };
+        });
     }, []);
 
     const setBoundary = useCallback((points: Point[]) => {
@@ -106,9 +122,13 @@ export function useSpatialCoverage(voxelSize: number = DEFAULT_VOXEL_SIZE) {
         let animationId: number;
 
         const tick = () => {
-            // Simulate movement (production: use DeviceOrientation)
-            positionRef.current.x += (Math.random() - 0.5) * 0.1;
-            positionRef.current.y += (Math.random() - 0.5) * 0.1;
+            // Only simulate movement if NO external position is provided
+            if (!externalPosition) {
+                positionRef.current.x += (Math.random() - 0.5) * 0.1;
+                positionRef.current.y += (Math.random() - 0.5) * 0.1;
+                // Sync state for position display
+                setState(prev => ({ ...prev, position: { ...positionRef.current } }));
+            }
 
             const result = sessionRef.current.paint(
                 positionRef.current.x,
@@ -124,9 +144,9 @@ export function useSpatialCoverage(voxelSize: number = DEFAULT_VOXEL_SIZE) {
 
         animationId = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(animationId);
-    }, [state.isActive, syncState]);
+    }, [state.isActive, syncState, externalPosition]);
 
-    return {
+    return useMemo(() => ({
         ...state,
         setActive,
         setBoundary,
@@ -134,5 +154,5 @@ export function useSpatialCoverage(voxelSize: number = DEFAULT_VOXEL_SIZE) {
         reset,
         paintCurrent,
         session: sessionRef.current
-    };
+    }), [state, setActive, setBoundary, clearBoundary, reset, paintCurrent]);
 }

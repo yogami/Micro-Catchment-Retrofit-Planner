@@ -23,18 +23,20 @@ export function createCoverageStats(params: {
     boundaryArea: number | null;
 }): CoverageStats {
     const coveredAreaM2 = params.voxelCount * (params.voxelSize * params.voxelSize);
-
-    const coveragePercent = params.boundaryArea !== null && params.boundaryArea > 0
-        ? Math.min(100, (coveredAreaM2 / params.boundaryArea) * 100)
-        : null;
-
-    const isComplete = coveragePercent !== null && coveragePercent >= 98;
+    const coveragePercent = calculatePercentage(coveredAreaM2, params.boundaryArea);
 
     return {
         coveredAreaM2,
         voxelCount: params.voxelCount,
         coveragePercent,
         expectedAreaM2: params.boundaryArea,
-        isComplete
+        isComplete: coveragePercent !== null && coveragePercent >= 98
     };
+}
+
+function calculatePercentage(covered: number, boundary: number | null): number | null {
+    if (boundary === null || boundary <= 0) {
+        return null;
+    }
+    return Math.min(100, (covered / boundary) * 100);
 }

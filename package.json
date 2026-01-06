@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "start": "serve dist -s -l 3000",
+    "api": "npx tsx src/api/server.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "jest",
@@ -19,13 +20,19 @@
   },
   "dependencies": {
     "@google/model-viewer": "^4.1.0",
+    "@hono/node-server": "^1.19.7",
+    "@hono/swagger-ui": "^0.5.3",
+    "@hono/zod-openapi": "^1.2.0",
+    "@hono/zod-validator": "^0.7.6",
     "@supabase/supabase-js": "^2.89.0",
     "@tensorflow/tfjs": "^4.22.0",
+    "hono": "^4.11.3",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.11.0",
+    "zod": "^4.3.5",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

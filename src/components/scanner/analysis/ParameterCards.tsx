@@ -82,18 +82,34 @@ function ManualIntensityInput({ scanner }: { scanner: ScannerHook }) {
 
     return (
         <div className="flex items-center gap-1">
-            <input type="number" step="0.01" value={val} onClick={(e) => e.stopPropagation()} onChange={onChange} className="bg-transparent border-b border-orange-500/30 w-16 text-xl font-bold text-white" />
+            <input
+                data-testid="intensity-input"
+                type="number"
+                step="0.01"
+                value={val}
+                onClick={(e) => e.stopPropagation()}
+                onChange={onChange}
+                className="bg-transparent border-b border-orange-500/30 w-16 text-xl font-bold text-white"
+            />
             <span className="text-sm text-orange-300/60">{unit}</span>
         </div>
     );
 }
+
 
 function DepthCard({ val, unit, onChange }: { val: number; unit: string; onChange: (v: number) => void }) {
     return (
         <div className="bg-purple-900/40 rounded-2xl p-4 border border-purple-500/30">
             <p className="text-purple-400 text-[10px] font-bold uppercase tracking-widest mb-1">Rainfall Depth</p>
             <div className="flex items-center gap-1">
-                <input type="number" step="0.1" value={val.toFixed(1)} onChange={(e) => onChange(parseFloat(e.target.value))} className="bg-transparent border-b border-purple-500/30 w-16 text-xl font-bold text-white" />
+                <input
+                    data-testid="depth-input"
+                    type="number"
+                    step="0.1"
+                    value={val.toFixed(1)}
+                    onChange={(e) => onChange(parseFloat(e.target.value))}
+                    className="bg-transparent border-b border-purple-500/30 w-16 text-xl font-bold text-white"
+                />
                 <span className="text-sm text-purple-300/60">{unit}</span>
             </div>
         </div>

@@ -66,6 +66,21 @@ describe('OBJExporter', () => {
             expect(obj).toContain('# Confidence: 95%');
         });
 
+        it('handles partial metadata', () => {
+            const mesh: MeshData = {
+                vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+                faces: new Uint32Array([0, 1, 2]),
+                metadata: {
+                    surfaceAreaM2: 10
+                    // missing confidence and captureDate
+                }
+            };
+            const obj = OBJExporter.export(mesh);
+            expect(obj).toContain('# Surface Area: 10 m²');
+            expect(obj).not.toContain('# Confidence:');
+            expect(obj).not.toContain('# Capture Date:');
+        });
+
         it('generates downloadable blob', () => {
             const mesh: MeshData = {
                 vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
@@ -89,6 +104,82 @@ describe('OBJExporter', () => {
             };
             const area = OBJExporter.calculateSurfaceArea(mesh);
             expect(area).toBeCloseTo(1.0, 2);
+        });
+
+        describe('validate', () => {
+            it('validates valid mesh data', () => {
+                const mesh: MeshData = {
+                    vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+                    faces: new Uint32Array([0, 1, 2])
+                };
+                const result = OBJExporter.validate(mesh);
+                expect(result.valid).toBe(true);
+                expect(result.errors).toHaveLength(0);
+            });
+
+            it('detects insufficient vertices', () => {
+                const mesh: MeshData = {
+                    vertices: new Float32Array([0, 0, 0]),
+                    faces: new Uint32Array([0, 1, 2])
+                };
+                const result = OBJExporter.validate(mesh);
+                expect(result.valid).toBe(false);
+                expect(result.errors).toContain('Mesh must have at least 3 vertices');
+            });
+
+            it('detects insufficient faces', () => {
+                const mesh: MeshData = {
+                    vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+                    faces: new Uint32Array([])
+                };
+                const result = OBJExporter.validate(mesh);
+                expect(result.valid).toBe(false);
+                expect(result.errors).toContain('Mesh must have at least 1 face');
+            });
+
+            it('detects invalid face indices', () => {
+                const mesh: MeshData = {
+                    vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), // 3 vertices
+                    faces: new Uint32Array([0, 1, 5]) // Index 5 is out of bounds
+                };
+                const result = OBJExporter.validate(mesh);
+                expect(result.valid).toBe(false);
+                expect(result.errors[0]).toMatch(/Invalid face index 5/);
+            });
+        });
+
+        describe('download', () => {
+            it('triggers download with correct filename', () => {
+                const mesh: MeshData = {
+                    vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+                    faces: new Uint32Array([0, 1, 2])
+                };
+
+                // Mock DOM and URL
+                const mockUrl = 'blob:test';
+                global.URL.createObjectURL = jest.fn(() => mockUrl);
+                global.URL.revokeObjectURL = jest.fn();
+
+                const mockLink = {
+                    href: '',
+                    download: '',
+                    click: jest.fn(),
+                    style: {}
+                };
+                jest.spyOn(document, 'createElement').mockReturnValue(mockLink as any);
+                jest.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink as any);
+                jest.spyOn(document.body, 'removeChild').mockImplementation(() => mockLink as any);
+
+                OBJExporter.download(mesh, 'test.obj');
+
+                expect(global.URL.createObjectURL).toHaveBeenCalled();
+                expect(mockLink.download).toBe('test.obj');
+                expect(mockLink.href).toBe(mockUrl);
+                expect(mockLink.click).toHaveBeenCalled();
+                expect(document.body.appendChild).toHaveBeenCalled();
+                expect(document.body.removeChild).toHaveBeenCalled();
+                expect(global.URL.revokeObjectURL).toHaveBeenCalledWith(mockUrl);
+            });
         });
     });
 });

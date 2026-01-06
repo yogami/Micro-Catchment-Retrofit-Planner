@@ -37,7 +37,7 @@ export function DemoOverlay({ onComplete, onSkip }: { onComplete: () => void; on
 
     return (
         <div className="fixed inset-0 z-[100] pointer-events-none">
-            <div className="absolute inset-0 bg-black/60 pointer-events-auto" onClick={() => { setIsVisible(false); onSkip(); }} />
+            <div data-testid="demo-tour-skip-backdrop" className="absolute inset-0 bg-black/60 pointer-events-auto" onClick={() => { setIsVisible(false); onSkip(); }} />
             <div className="absolute bottom-8 left-4 right-4 pointer-events-auto">
                 <DemoCard
                     step={DEMO_STEPS[currentStep]}

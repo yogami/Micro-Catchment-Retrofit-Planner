@@ -2,20 +2,29 @@
  * E2E Test: Coverage Heatmap (Phase 1)
  * 
  * Tests the static heatmap feature behind the COVERAGE_HEATMAP feature flag.
+ * Uses the robust Fairfax demo flow to enter the scanner state.
  */
 import { test, expect } from '@playwright/test';
 
 test.describe('Coverage Heatmap E2E', () => {
     test.beforeEach(async ({ page }) => {
+        // Increase timeout for scan initialization
+        test.setTimeout(60000);
+
         // Mock camera and bypass demo overlay
         await page.addInitScript(() => {
-            // Mock getUserMedia to avoid camera permission prompts
-            navigator.mediaDevices.getUserMedia = async () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = 640;
-                canvas.height = 480;
-                return canvas.captureStream();
-            };
+            // Force TFJS to use CPU backend
+            localStorage.setItem('tfjs-backend', 'cpu');
+
+            // Mock getUserMedia
+            Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+                value: async () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 640;
+                    canvas.height = 480;
+                    return canvas.captureStream(30);
+                }
+            });
 
             // Skip demo overlay
             localStorage.setItem('microcatchment_demo_seen', 'true');
@@ -26,41 +35,38 @@ test.describe('Coverage Heatmap E2E', () => {
     });
 
     test('shows heatmap when COVERAGE_HEATMAP flag is enabled', async ({ page }) => {
+        // Log console messages
+        page.on('console', msg => console.log('BROWSER:', msg.text()));
+        page.on('pageerror', err => console.log('BROWSER ERROR:', err.message));
+
         // Navigate to landing page
         await page.goto('/');
         await page.waitForLoadState('networkidle');
 
-        // Click on Fairfax demo to enter scanner
-        const fairfaxBtn = page.locator('button:has-text("Fairfax")');
-        await fairfaxBtn.click();
+        // Use Fairfax Demo to reliably enter scanner
+        await page.getByRole('button', { name: /Fairfax/i }).click();
 
-        // Wait for scanner to load
-        await expect(page.locator('text=/Ready to Scan|Measuring/i')).toBeVisible({ timeout: 10000 });
+        // Wait for demo to lock (Results shown)
+        await expect(page.locator('text=Catchment Area')).toBeVisible({ timeout: 15000 });
 
-        // Start scanning by holding the sampling button
-        const samplingBtn = page.getByTestId('sampling-button');
-        await samplingBtn.dispatchEvent('pointerdown', { button: 0 });
+        // Unlock to return to scanning mode
+        await page.getByRole('button', { name: /Resume Mapping/i }).click();
 
-        // Wait briefly for scanning to start
-        await page.waitForTimeout(100);
-
-        // Check for heatmap visibility
+        // Now we should be in scanning mode (FloatingStatus visible)
+        // Wait for heatmap to appear
         const heatmap = page.getByTestId('coverage-heatmap');
-        await expect(heatmap).toBeVisible({ timeout: 5000 });
+        await expect(heatmap).toBeVisible({ timeout: 10000 });
 
         // Check heatmap contains expected elements
         await expect(page.getByTestId('coverage-canvas')).toBeVisible();
         await expect(page.getByTestId('coverage-percent')).toBeVisible();
         await expect(page.getByTestId('finish-sweep-button')).toBeVisible();
 
-        // Release the button
-        await samplingBtn.dispatchEvent('pointerup', { button: 0 });
-
         // Click finish sweep
         await page.getByTestId('finish-sweep-button').click();
 
-        // Scanner should lock
-        await expect(page.getByTestId('locked-area-value')).toBeVisible({ timeout: 5000 });
+        // Scanner should lock again
+        await expect(page.locator('text=Catchment Area')).toBeVisible({ timeout: 5000 });
     });
 
     test('heatmap is hidden when flag is disabled', async ({ page }) => {
@@ -72,19 +78,21 @@ test.describe('Coverage Heatmap E2E', () => {
         await page.goto('/');
         await page.waitForLoadState('networkidle');
 
-        const fairfaxBtn = page.locator('button:has-text("Fairfax")');
-        await fairfaxBtn.click();
+        // Use Fairfax Demo
+        await page.getByRole('button', { name: /Fairfax/i }).click();
 
-        await expect(page.locator('text=/Ready to Scan|Measuring/i')).toBeVisible({ timeout: 10000 });
+        // Wait for results
+        await expect(page.locator('text=Catchment Area')).toBeVisible({ timeout: 15000 });
 
-        const samplingBtn = page.getByTestId('sampling-button');
-        await samplingBtn.dispatchEvent('pointerdown', { button: 0 });
-        await page.waitForTimeout(200);
+        // Unlock
+        await page.getByRole('button', { name: /Resume Mapping/i }).click();
 
         // Heatmap should NOT be visible when flag is disabled
         const heatmap = page.getByTestId('coverage-heatmap');
-        await expect(heatmap).not.toBeVisible();
+        await expect(heatmap).not.toBeAttached();
 
-        await samplingBtn.dispatchEvent('pointerup', { button: 0 });
+        // Ensure we are back in scanning mode
+        // Check for Sampling Button as proof we are scanning
+        await expect(page.getByTestId('sampling-button')).toBeVisible();
     });
 });

@@ -47,23 +47,33 @@ export class Boundary {
 
     /** Check if a point is inside the boundary using ray casting */
     contains(x: number, y: number): boolean {
-        // Quick bounding box check
-        if (x < this.minX || x > this.maxX || y < this.minY || y > this.maxY) {
+        if (!this.isInBoundingBox(x, y)) {
             return false;
         }
+        return this.rayCast(x, y);
+    }
 
-        // Ray casting algorithm
+    private isInBoundingBox(x: number, y: number): boolean {
+        return x >= this.minX && x <= this.maxX && y >= this.minY && y <= this.maxY;
+    }
+
+    private rayCast(x: number, y: number): boolean {
         let inside = false;
         const n = this.points.length;
         for (let i = 0, j = n - 1; i < n; j = i++) {
-            const xi = this.points[i].x, yi = this.points[i].y;
-            const xj = this.points[j].x, yj = this.points[j].y;
-
-            const intersect = ((yi > y) !== (yj > y)) &&
-                (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-            if (intersect) inside = !inside;
+            if (this.intersects(x, y, this.points[i], this.points[j])) {
+                inside = !inside;
+            }
         }
         return inside;
+    }
+
+    private intersects(x: number, y: number, p1: Point, p2: Point): boolean {
+        const yBound = (p1.y > y) !== (p2.y > y);
+        if (!yBound) {
+            return false;
+        }
+        return x < (p2.x - p1.x) * (y - p1.y) / (p2.y - p1.y) + p1.x;
     }
 
     /** Create a rectangular boundary from two corner points */

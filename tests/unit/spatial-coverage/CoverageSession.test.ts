@@ -53,6 +53,36 @@ describe('CoverageSession', () => {
         });
     });
 
+    describe('Boundary utility', () => {
+        it('clears boundary', () => {
+            const session = new CoverageSession('test');
+            session.setBoundary(new Boundary([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }]));
+            expect(session.boundary).not.toBeNull();
+            session.clearBoundary();
+            expect(session.boundary).toBeNull();
+        });
+
+        it('checks isInsideBoundary correctly', () => {
+            const session = new CoverageSession('test');
+            // No boundary -> always true
+            expect(session.isInsideBoundary(100, 100)).toBe(true);
+
+            session.setBoundary(new Boundary([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }]));
+            expect(session.isInsideBoundary(0.2, 0.2)).toBe(true);
+            expect(session.isInsideBoundary(2, 2)).toBe(false);
+        });
+    });
+
+    describe('Get Area', () => {
+        it('calculates covered area', () => {
+            const session = new CoverageSession('test', 1.0); // 1x1m voxels
+            session.paint(0, 0);
+            session.paint(10, 10);
+            expect(session.getVoxelCount()).toBe(2);
+            expect(session.getArea()).toBeCloseTo(2.0); // 2 * 1*1
+        });
+    });
+
     describe('getStats', () => {
         it('returns correct coverage stats', () => {
             const session = new CoverageSession('test', 0.05);

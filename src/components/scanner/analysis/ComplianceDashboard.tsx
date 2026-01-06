@@ -19,7 +19,7 @@ function GrantCard({ res, generating, onGenerate }: {
     res: ComplianceResult; generating: boolean; onGenerate: (id: string) => void
 }) {
     return (
-        <div className="flex items-center justify-between bg-black/40 p-3 rounded-2xl border border-white/5">
+        <div data-testid={`grant-card-${res.grantProgram}`} className="flex items-center justify-between bg-black/40 p-3 rounded-2xl border border-white/5">
             <GrantInfo res={res} />
             <GrantButton res={res} generating={generating} onGenerate={onGenerate} />
         </div>
@@ -36,6 +36,7 @@ function GrantInfo({ res }: { res: ComplianceResult }) {
                     <GrantStatusLabel eligible={res.eligible} />
                 </span>
             </div>
+            {res.summary && <p className="text-[9px] text-gray-500 font-bold whitespace-pre-line">{res.summary}</p>}
         </div>
     );
 }
@@ -64,5 +65,5 @@ function getButtonCls(eligible: boolean) {
 
 function ButtonLabel({ generating }: { generating: boolean }) {
     if (generating) return <>⌛ generating...</>;
-    return <>📄 pre-app</>;
+    return <>📄 PRE-APP</>;
 }

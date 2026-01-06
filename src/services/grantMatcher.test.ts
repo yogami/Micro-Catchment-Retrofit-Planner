@@ -1,4 +1,4 @@
-import { matchEligibleGrants, type ProjectForGrants } from './grantMatcher';
+import { matchEligibleGrants, type ProjectForGrants, type Grant } from './grantMatcher';
 
 describe('Berlin Grant Matching', () => {
     const berlinProject: ProjectForGrants = {
@@ -56,5 +56,44 @@ describe('Grant Amount Calculation', () => {
         const grants = matchEligibleGrants(hugeProject);
         const bene2 = grants.find(g => g.id === 'bene2');
         expect(bene2?.maxAmountEUR).toBeLessThanOrEqual(100000);
+    });
+});
+
+describe('Helper Functions', () => {
+    it('formatGrantsForPDF returns correct strings', () => {
+        const { formatGrantsForPDF } = require('./grantMatcher');
+        const grants = [{
+            name: 'Test Grant',
+            maxFundingPercent: 50,
+            maxAmountEUR: 1000
+        }];
+        expect(formatGrantsForPDF(grants)).toContain('• Test Grant: Up to 50% (max €1,000)');
+        expect(formatGrantsForPDF([])).toContain('No matching funding programs');
+    });
+});
+
+describe('Granular Region Checks', () => {
+    it('handles EU boundary checks', () => {
+        const { matchEligibleGrants } = require('./grantMatcher');
+        // Spain (39/-4) -> EU but likely not Germany/Berlin specific
+        const spainProject: ProjectForGrants = {
+            latitude: 40.0, longitude: -3.0, totalCostEUR: 60000,
+            fixes: [{ type: 'rain_garden', size: 10 }], areaM2: 100,
+        };
+        const grants = matchEligibleGrants(spainProject);
+        // Should find EU Horizon if cost high enough
+        expect(grants.find((g: Grant) => g.id === 'eu_horizon')).toBeDefined();
+        // Should not find Berlin
+        expect(grants.find((g: Grant) => g.id === 'bene2')).toBeUndefined();
+    });
+
+    it('checkKfw432 requires rain garden of size 20', () => {
+        const { matchEligibleGrants } = require('./grantMatcher');
+        const germanyProject: ProjectForGrants = {
+            latitude: 50.0, longitude: 10.0, totalCostEUR: 1000,
+            fixes: [{ type: 'rain_garden', size: 10 }], areaM2: 100, // < 20
+        };
+        const grants = matchEligibleGrants(germanyProject);
+        expect(grants.find((g: Grant) => g.id === 'kfw432')).toBeUndefined();
     });
 });

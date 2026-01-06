@@ -11,11 +11,18 @@ export default defineConfig({
         baseURL: process.env.PRODUCTION_URL || 'http://localhost:5173',
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
+        // Fake camera for headless testing (no permission prompts)
+        launchOptions: {
+            args: [
+                '--use-fake-ui-for-media-stream',
+                '--use-fake-device-for-media-stream',
+            ],
+        },
     },
     projects: [
         {
             name: 'mobile',
-            use: { ...devices['iPhone 14'] },
+            use: { ...devices['Pixel 5'] },
         },
         {
             name: 'desktop',

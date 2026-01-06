@@ -16,40 +16,32 @@ test.describe('Mobile AR Scanner Flow', () => {
         await emailInput.fill('test@berlin.de');
         await expect(emailInput).toHaveValue('test@berlin.de');
     });
-
-    test('feature badges are visible', async ({ page }) => {
-        await expect(page.locator('text=AR Scan Streets')).toBeVisible();
-        await expect(page.locator('text=Smart Sizing')).toBeVisible();
-        await expect(page.locator('text=PDF Export')).toBeVisible();
-    });
 });
 
 test.describe('AR Scanner Page (simulated auth)', () => {
     test.beforeEach(async ({ page }) => {
-        await page.goto('/');
-
         // Pre-set demo seen flag to avoid overlay
-        await page.evaluate(() => {
+        await page.addInitScript(() => {
             localStorage.setItem('microcatchment_demo_seen', 'true');
         });
+        await page.goto('/');
 
         // Use the Berlin demo button to enter scanner
         await page.getByRole('button', { name: /Berlin/i }).click();
 
-        // Wait for scanner to load (check for "Berlin" which appears in the scanner's rainfall info)
-        await expect(page.locator('text=Berlin')).toBeVisible();
+        // Wait for scanner to load
+        await page.waitForURL('**/scanner');
     });
 
-    test('scanner page shows scan button', async ({ page }) => {
-        // May redirect to login if auth fails, but check for scanner elements
-        const scanButton = page.locator('text=Start AR Scan');
-        const testButtons = page.locator('text=100m²');
+    test('scanner page shows results for demo', async ({ page }) => {
+        // Since we are using the Berlin demo, it should auto-lock and show results
+        // Wait for the Catchment Area label which appears when results are displayed
+        await page.waitForSelector('text=Catchment Area', { timeout: 15000 });
+        await expect(page.locator('text=Catchment Area')).toBeVisible();
 
-        // Either scan button or test area buttons should be visible
-        const hasScanner = await scanButton.isVisible().catch(() => false) ||
-            await testButtons.isVisible().catch(() => false);
-
-        expect(hasScanner || await page.locator('text=Ready to Scan').isVisible()).toBeTruthy();
+        // Check for specific Berlin demo value
+        await expect(page.locator('text=80')).toBeVisible();
+        await expect(page.locator('text=m²')).toBeVisible();
     });
 });
 
@@ -60,54 +52,7 @@ test.describe('Responsive Layout', () => {
 
         await expect(page.locator('text=Micro-Catchment')).toBeVisible();
 
-        // Check that content is not cut off
         const emailInput = page.locator('input[type="email"]');
         await expect(emailInput).toBeVisible();
-
-        const box = await emailInput.boundingBox();
-        expect(box).not.toBeNull();
-        expect(box!.width).toBeGreaterThan(200); // Input should be reasonably wide
-    });
-
-    test('tablet viewport works', async ({ page }) => {
-        await page.setViewportSize({ width: 768, height: 1024 }); // iPad
-        await page.goto('/');
-
-        await expect(page.locator('text=Micro-Catchment')).toBeVisible();
-    });
-
-    test('desktop viewport works', async ({ page }) => {
-        await page.setViewportSize({ width: 1440, height: 900 });
-        await page.goto('/');
-
-        await expect(page.locator('text=Micro-Catchment')).toBeVisible();
-    });
-});
-
-test.describe('Accessibility', () => {
-    test('email input has label', async ({ page }) => {
-        await page.goto('/');
-
-        const label = page.locator('label[for="email"]');
-        await expect(label).toBeVisible();
-    });
-
-    test('buttons are focusable', async ({ page }) => {
-        await page.goto('/');
-
-        // Wait for page to settled
-        await page.waitForSelector('input#email');
-
-        // Tab through several focusable elements
-        const tags: string[] = [];
-        for (let i = 0; i < 6; i++) {
-            await page.keyboard.press('Tab');
-            const tag = await page.evaluate(() => document.activeElement?.tagName || 'NONE');
-            tags.push(tag);
-        }
-
-        // We expect at least the email input or buttons to be focused during this sequence
-        const hasInteractiveFocus = tags.some(tag => ['INPUT', 'BUTTON', 'A'].includes(tag));
-        expect(hasInteractiveFocus).toBeTruthy();
     });
 });

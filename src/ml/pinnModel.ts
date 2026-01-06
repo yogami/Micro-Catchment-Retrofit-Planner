@@ -1,14 +1,32 @@
-/**
- * Physics-Informed Neural Network (PINN) Model for Runoff Simulation
- * 
- * Solves the kinematic wave approximation of Saint-Venant equations:
- * ∂h/∂t + ∂Q/∂x = q_lateral (rainfall input)
- * Q = (1/n) * A * R^(2/3) * S^(1/2) (Manning's equation)
- * 
- * For shallow overland flow: Q ≈ α * h^m where α = S^0.5/n, m = 5/3
- */
-
 import * as tf from '@tensorflow/tfjs';
+
+let isTfInitialized = false;
+
+/**
+ * Initialize TensorFlow.js with appropriate backend settings
+ */
+export async function initializeTf(): Promise<void> {
+    if (isTfInitialized) return;
+    try {
+        await tf.ready();
+        isTfInitialized = true;
+    } catch (e) {
+        await initializeCpuFallback(e);
+    }
+}
+
+async function initializeCpuFallback(error: any): Promise<void> {
+    console.warn('TFJS ready failed, attempting CPU fallback', error);
+    try {
+        await tf.setBackend('cpu');
+        await tf.ready();
+        isTfInitialized = true;
+    } catch (innerError) {
+        console.error('TFJS initialization fatal failure', innerError);
+    }
+}
+
+initializeTf();
 
 // ============ Types ============
 
@@ -51,15 +69,12 @@ let isModelLoading = false;
 
 /**
  * Create the PINN model architecture
- * Input: [x, t, rainfall, slope, manningN] (normalized)
- * Output: [discharge]
  */
 export async function createPINNModel(): Promise<tf.Sequential> {
-    await tf.ready();
+    await initializeTf();
 
     const model = tf.sequential();
 
-    // Input layer + Hidden layer 1
     model.add(tf.layers.dense({
         units: 32,
         activation: 'tanh',
@@ -67,31 +82,13 @@ export async function createPINNModel(): Promise<tf.Sequential> {
         kernelInitializer: 'glorotNormal',
     }));
 
-    // Hidden layer 2
-    model.add(tf.layers.dense({
-        units: 64,
-        activation: 'tanh',
-        kernelInitializer: 'glorotNormal',
-    }));
+    model.add(tf.layers.dense({ units: 64, activation: 'tanh', kernelInitializer: 'glorotNormal' }));
+    model.add(tf.layers.dense({ units: 64, activation: 'tanh', kernelInitializer: 'glorotNormal' }));
+    model.add(tf.layers.dense({ units: 32, activation: 'tanh', kernelInitializer: 'glorotNormal' }));
 
-    // Hidden layer 3
-    model.add(tf.layers.dense({
-        units: 64,
-        activation: 'tanh',
-        kernelInitializer: 'glorotNormal',
-    }));
-
-    // Hidden layer 4
-    model.add(tf.layers.dense({
-        units: 32,
-        activation: 'tanh',
-        kernelInitializer: 'glorotNormal',
-    }));
-
-    // Output layer (discharge, always positive via softplus)
     model.add(tf.layers.dense({
         units: 1,
-        activation: 'softplus', // Ensures positive output
+        activation: 'softplus',
     }));
 
     model.compile({
@@ -109,7 +106,6 @@ export async function getModel(): Promise<tf.Sequential> {
     if (pinnModel) return pinnModel;
 
     if (isModelLoading) {
-        // Wait for loading to complete
         await new Promise(resolve => setTimeout(resolve, 100));
         return getModel();
     }
@@ -117,8 +113,6 @@ export async function getModel(): Promise<tf.Sequential> {
     isModelLoading = true;
 
     try {
-        // Try to load pre-trained weights
-        // TODO: Implement model loading from /public/models/pinn_runoff.json
         pinnModel = await createPINNModel();
         return pinnModel;
     } finally {
@@ -129,10 +123,10 @@ export async function getModel(): Promise<tf.Sequential> {
 // ============ Normalization ============
 
 const NORMALIZATION = {
-    x: { min: 0, max: 200 },         // meters
-    t: { min: 0, max: 120 },         // minutes
-    rainfall: { min: 0, max: 150 },  // mm/hr
-    slope: { min: 0.001, max: 0.2 }, // m/m
+    x: { min: 0, max: 200 },
+    t: { min: 0, max: 120 },
+    rainfall: { min: 0, max: 150 },
+    slope: { min: 0.001, max: 0.2 },
     manningN: { min: 0.01, max: 0.1 },
 };
 
@@ -189,48 +183,27 @@ export async function predictRunoff(input: PINNInput): Promise<PINNOutput> {
     };
 }
 
-// ============ Analytical Solution (for validation) ============
-
 /**
  * Compute the kinematic wave analytical solution
- * Used for PINN training and validation
- * 
- * Reference: Woolhiser & Liggett (1967)
  */
 export function computeKinematicWaveSolution(params: KinematicWaveParams): KinematicWaveResult {
     const { length, rainfall, slope, manningN, width } = params;
-
-    // Convert rainfall to m/s
-    const q = rainfall / (1000 * 3600); // m/s
-
-    // Kinematic wave celerity parameter
+    const q = rainfall / (1000 * 3600);
     const alpha = Math.sqrt(slope) / manningN;
-    const m = 5 / 3; // Constant for wide rectangular channel
+    const m = 5 / 3;
 
-    // Equilibrium depth (when inflow = outflow)
-    // From: q * L = alpha * h^m * width
-    // h = (q * L / (alpha * width))^(1/m)
     const h_eq = Math.pow((q * length) / (alpha * width), 1 / m);
-
-    // Time to equilibrium (time of concentration)
-    // t_c = L / c where c = alpha * m * h^(m-1)
     const c_eq = alpha * m * Math.pow(h_eq, m - 1);
-    const t_c = length / c_eq; // seconds
-    const timeToPeak = t_c / 60; // minutes
+    const t_c = length / c_eq;
 
-    // Peak discharge at equilibrium
-    // Q = alpha * h^m * width
-    const Q_peak = alpha * Math.pow(h_eq, m) * width; // m³/s
-    const peakDischarge = Q_peak * 1000; // L/s
+    const peakDischarge = alpha * Math.pow(h_eq, m) * width * 1000;
 
     return {
         peakDischarge,
-        timeToPeak,
-        equilibriumDepth: h_eq * 1000, // mm
+        timeToPeak: t_c / 60,
+        equilibriumDepth: h_eq * 1000,
     };
 }
-
-// ============ Fallback (Rational Method) ============
 
 /**
  * Fallback to rational method if PINN fails
@@ -240,20 +213,7 @@ export function computeRationalMethod(
     area: number,
     coefficient: number = 0.9
 ): number {
-    // Q = C * i * A / 3600
-    return (coefficient * rainfall * area) / 3600; // L/s
-}
-
-// ============ Hybrid Prediction ============
-
-function getFallbackResult(rainfall: number, area: number, confidence: number): PINNOutput {
-    return {
-        discharge: computeRationalMethod(rainfall, area),
-        depth: 0,
-        velocity: 0,
-        confidence,
-        isPINNPrediction: false,
-    };
+    return (coefficient * rainfall * area) / 3600;
 }
 
 /**
@@ -273,4 +233,14 @@ function decidePinnUsage(pinn: PINNOutput, rational: number, input: PINNInput, a
     const ratio = pinn.discharge / rational;
     if (ratio > 0.3 && ratio < 3.0) return pinn;
     return getFallbackResult(input.rainfall, area, 0.5);
+}
+
+function getFallbackResult(rainfall: number, area: number, confidence: number): PINNOutput {
+    return {
+        discharge: computeRationalMethod(rainfall, area),
+        depth: 0,
+        velocity: 0,
+        confidence,
+        isPINNPrediction: false,
+    };
 }

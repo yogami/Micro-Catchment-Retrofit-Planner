@@ -1,43 +1,64 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { VoxelManager } from '../utils/ar/VoxelManager';
 import { SfMOptimizer, type OptimizationResult } from '../utils/ar/SfMOptimizer';
 import { useAuth } from '../contexts/AuthContext';
-import { parseArea } from '../utils/units';
 import { useUnitStore } from '../store/useUnitStore';
-import { openMeteoClient } from '../services/openMeteoClient';
 import {
-    suggestGreenFixes,
-    calculateTotalReduction,
-    computePeakRunoff,
-    computeRunoffWithPINN,
-    computeWQv
+    calculateTotalReduction
 } from '../utils/hydrology';
+import { parseArea } from '../utils/units';
 import {
-    createStormwaterDiscoveryUseCase,
     STORMWATER_PROFILES,
     type StormwaterParameters,
     type JurisdictionChain,
-    type DiscoveryResult
+    type DiscoveryResult,
+    createStormwaterDiscoveryUseCase
 } from '../lib/geo-regulatory';
-import { createPollutantService, type PollutantLoadResult, type PollutantCalculationService, type BMPSpec } from '../lib/env-calculator';
-import { createGrantPDFService, type ComplianceResult, type GrantPDFService, type GrantApplicationData } from '../lib/grant-generator';
+import { type PollutantLoadResult, type PollutantCalculationService, createPollutantService } from '../lib/env-calculator';
+import { type ComplianceResult, type GrantPDFService, type GrantApplicationData, createGrantPDFService } from '../lib/grant-generator';
 import type { GreenFix } from '../utils/hydrology';
 
+import { useScannerLocation } from './scanner/useScannerLocation';
+import { useScannerDemo } from './scanner/useScannerDemo';
+import { useScannerHydrology } from './scanner/useScannerHydrology';
+import { useScannerCompliance } from './scanner/useScannerCompliance';
+import { useScannerVoxelMapping } from './scanner/useScannerVoxelMapping';
+import { createDepthSensingService, type DepthMode } from '../lib/depth-sensing';
+
 export interface ARScannerState {
-    isScanning: boolean; detectedArea: number | null; rainfall: number; isLoadingRainfall: boolean;
-    fixes: GreenFix[]; showAR: boolean; location: { lat: number; lon: number } | null;
-    locationName: string; cameraError: string | null; isDetecting: boolean;
-    scanProgress: number; isLocked: boolean; intensityMode: 'auto' | 'manual';
-    manualIntensity: number; activeProfile: typeof STORMWATER_PROFILES[0];
-    sizingMode: 'rate' | 'volume'; manualDepth: number; discoveryStatus: 'idle' | 'discovering' | 'ready';
-    jurisdictionChain: JurisdictionChain | null; discoveryResult: DiscoveryResult<StormwaterParameters> | null;
-    pollutantResult: PollutantLoadResult | null; complianceResults: ComplianceResult[];
-    isGeneratingPDF: boolean; peakRunoff: number; wqv: number; isPinnActive: boolean;
+    isScanning: boolean;
+    detectedArea: number | null;
+    rainfall: number;
+    isLoadingRainfall: boolean;
+    fixes: GreenFix[];
+    showAR: boolean;
+    location: { lat: number; lon: number } | null;
+    locationName: string;
+    cameraError: string | null;
+    isDetecting: boolean;
+    scanProgress: number;
+    isLocked: boolean;
+    intensityMode: 'auto' | 'manual';
+    manualIntensity: number;
+    activeProfile: typeof STORMWATER_PROFILES[0];
+    sizingMode: 'rate' | 'volume';
+    manualDepth: number;
+    discoveryStatus: 'idle' | 'discovering' | 'ready';
+    jurisdictionChain: JurisdictionChain | null;
+    discoveryResult: DiscoveryResult<StormwaterParameters> | null;
+    pollutantResult: PollutantLoadResult | null;
+    complianceResults: ComplianceResult[];
+    isGeneratingPDF: boolean;
+    peakRunoff: number;
+    wqv: number;
+    isPinnActive: boolean;
     // Field Validation State
     optimizationResult: OptimizationResult | null;
     tapeValidation: number | null; // Manual tape measure input (m²)
     validationError: number | null; // Percentage error vs tape
+    // Depth Sensing State
+    depthMode: DepthMode;
+    accuracyLabel: string;
 }
 
 export interface Services {
@@ -48,14 +69,10 @@ export interface Services {
 
 export type UpdateFn = (u: Partial<ARScannerState>) => void;
 
-interface EffectProps {
-    state: ARScannerState;
-    demo: string | undefined;
-    update: UpdateFn;
-    services: Services;
-    setUnits: (u: 'metric' | 'imperial') => void;
-}
-
+/**
+ * useARScanner - Primary orchestration hook for the AR Scanner module.
+ * Delegates specialized logic to sub-hooks to maintain ≤ 3 cyclomatic complexity.
+ */
 export function useARScanner() {
     const { user, signOut } = useAuth();
     const navigate = useNavigate();
@@ -71,26 +88,37 @@ export function useARScanner() {
         sizingMode: 'rate', manualDepth: 30.48, discoveryStatus: 'idle',
         jurisdictionChain: null, discoveryResult: null, pollutantResult: null,
         complianceResults: [], isGeneratingPDF: false, peakRunoff: 0, wqv: 0, isPinnActive: false,
-        optimizationResult: null, tapeValidation: null, validationError: null
+        optimizationResult: null, tapeValidation: null, validationError: null,
+        depthMode: 'initializing', accuracyLabel: 'Initializing...'
     });
 
     const update = useCallback((u: Partial<ARScannerState>) => setState(s => ({ ...s, ...u })), []);
+
     const services = useMemo<Services>(() => ({
-        discovery: createStormwaterDiscoveryUseCase(), pollutant: createPollutantService(), pdf: createGrantPDFService()
+        discovery: createStormwaterDiscoveryUseCase(),
+        pollutant: createPollutantService(),
+        pdf: createGrantPDFService()
     }), []);
 
     // Refs for optimization (accessed by handlers)
     const sfmOptimizerRef = useRef(new SfMOptimizer());
 
-    useScannerEffects({ state, demo: demoScenario, update, services, setUnits: setUnitSystem });
+    // Specialist Hooks (Decomposition of the god-hook)
+    useScannerLocation(demoScenario, update, state.location, services.discovery, setUnitSystem);
+    useScannerDemo(demoScenario, state.isScanning, update, services.discovery, setUnitSystem);
+    useScannerHydrology(state, update);
+    useScannerCompliance(state, services, update);
+    useScannerVoxelMapping(state, update, sfmOptimizerRef.current);
 
-    const handleLogout = async () => { await signOut(); navigate('/'); };
-    const handleGenerateGrant = (gid: string) => startGrantGeneration(gid, state, services, update);
+    const handleLogout = useCallback(async () => {
+        await signOut();
+        navigate('/');
+    }, [signOut, navigate]);
 
-    /**
-     * "Review Sweep" button handler - runs SfM bundle adjustment
-     * Spec: Shows BEFORE 100.1sqft → AFTER 100.0sqft
-     */
+    const handleGenerateGrant = useCallback((gid: string) => {
+        startGrantGeneration(gid, state, services, update);
+    }, [state, services, update]);
+
     const handleOptimizeSweep = useCallback(() => {
         if (state.detectedArea === null) return;
         const result = sfmOptimizerRef.current.optimize(state.detectedArea);
@@ -100,203 +128,32 @@ export function useARScanner() {
         });
     }, [state.detectedArea, update]);
 
-    /**
-     * Manual tape measure validation
-     * Compares app measurement to field tape measure
-     */
     const handleValidateTape = useCallback((tapeValue: number) => {
         if (state.detectedArea === null || tapeValue <= 0) return;
-        const tapeValueM2 = parseArea(tapeValue, unitSystem);
+        const tapeValueM2 = parseArea(Math.abs(tapeValue), unitSystem);
         const errorPercent = Math.abs(state.detectedArea - tapeValueM2) / tapeValueM2 * 100;
         update({
             tapeValidation: tapeValueM2,
-            validationError: Math.round(errorPercent * 100) / 100 // 2 decimal places
+            validationError: Math.round(errorPercent * 100) / 100
         });
-    }, [state.detectedArea, unitSystem, update]);
+    }, [state.detectedArea, update, unitSystem]);
 
-    return {
-        ...state, user, unitSystem, toggleUnitSystem, update,
+    return useMemo(() => ({
+        ...state,
+        user,
+        unitSystem,
+        toggleUnitSystem,
+        update,
+        handleLogout,
+        handleGenerateGrant,
+        navigate,
+        handleOptimizeSweep,
+        handleValidateTape
+    }), [
+        state, user, unitSystem, toggleUnitSystem, update,
         handleLogout, handleGenerateGrant, navigate,
         handleOptimizeSweep, handleValidateTape
-    };
-}
-
-function useScannerEffects({ state, demo, update, services, setUnits }: EffectProps) {
-    useLocationEffect(demo, update);
-    useDemoEffect({ demo, isScanning: state.isScanning, update, discovery: services.discovery, setUnits });
-    useProfileEffect({ loc: state.location, demo, discovery: services.discovery, update, setUnits });
-    useHydrologyEffect(state, update);
-    useComplianceEffect(state, services, update);
-    useScanEffect(state, update);
-}
-
-function useLocationEffect(demo: string | undefined, update: UpdateFn) {
-    useEffect(() => {
-        if (demo) return;
-        async function init() {
-            update({ isLoadingRainfall: true });
-            const lat = 52.52, lon = 13.405;
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    async (pos) => { handleLoc(pos.coords.latitude, pos.coords.longitude, update); },
-                    async () => { handleLoc(lat, lon, update); }
-                );
-            }
-        }
-        init();
-    }, [demo, update]);
-}
-
-async function handleLoc(lat: number, lon: number, update: UpdateFn) {
-    const storm = await openMeteoClient.getDesignStorm(lat, lon);
-    update({ location: { lat, lon }, rainfall: storm, isLoadingRainfall: false });
-}
-
-function useDemoEffect({ demo, isScanning, update, discovery, setUnits }: {
-    demo: string | undefined; isScanning: boolean; update: UpdateFn; discovery: Services['discovery']; setUnits: (u: 'metric' | 'imperial') => void;
-}) {
-    useEffect(() => {
-        if (!demo || isScanning) return;
-        async function start() {
-            update({ isLoadingRainfall: true });
-            const coords = demo === 'berlin' ? { lat: 52.52, lon: 13.405, name: 'Berlin' } : { lat: 38.8462, lon: -77.3064, name: 'Fairfax, VA' };
-            const res = await discovery.execute({ latitude: coords.lat, longitude: coords.lon, domain: 'stormwater' }) as DiscoveryResult<StormwaterParameters>;
-            const storm = await openMeteoClient.getDesignStorm(coords.lat, coords.lon);
-            update({
-                location: { lat: coords.lat, lon: coords.lon }, locationName: coords.name, rainfall: storm, isLoadingRainfall: false,
-                isScanning: true, isLocked: true, detectedArea: demo === 'fairfax' ? 120 : 80,
-                activeProfile: res.profile, jurisdictionChain: res.chain, discoveryResult: res,
-                manualIntensity: res.profile.parameters.designIntensity_mm_hr, manualDepth: res.profile.parameters.designDepth_mm
-            });
-            setUnits(res.profile.parameters.units);
-        }
-        start();
-    }, [demo, isScanning, update, discovery, setUnits]);
-}
-
-function useProfileEffect({ loc, demo, discovery, update, setUnits }: {
-    loc: { lat: number; lon: number } | null; demo: string | undefined; discovery: Services['discovery']; update: UpdateFn; setUnits: (u: 'metric' | 'imperial') => void;
-}) {
-    useEffect(() => {
-        if (!loc || demo) return;
-        update({ discoveryStatus: 'discovering' });
-        discovery.execute({ latitude: loc.lat, longitude: loc.lon, domain: 'stormwater' })
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .then((rawRes: any) => {
-                const res = rawRes as DiscoveryResult<StormwaterParameters>;
-                update({
-                    activeProfile: res.profile, jurisdictionChain: res.chain, discoveryResult: res, discoveryStatus: 'ready',
-                    manualIntensity: res.profile.parameters.designIntensity_mm_hr, manualDepth: res.profile.parameters.designDepth_mm
-                });
-                if (res.status !== 'default') setUnits(res.profile.parameters.units);
-            }).catch(() => update({ discoveryStatus: 'ready' }));
-    }, [loc, demo, discovery, update, setUnits]);
-}
-
-function useHydrologyEffect(state: ARScannerState, update: UpdateFn) {
-    useEffect(() => {
-        if (!state.detectedArea) return;
-        const currentIntensity = state.intensityMode === 'auto' ? state.rainfall : state.manualIntensity;
-        async function calc() {
-            try {
-                const q = await computeRunoffWithPINN(currentIntensity, state.detectedArea!);
-                update({ peakRunoff: q, isPinnActive: true });
-            } catch {
-                const rv = state.activeProfile.parameters.rvFormula(100);
-                update({ peakRunoff: computePeakRunoff(currentIntensity, state.detectedArea!, rv), isPinnActive: false });
-            }
-            update({
-                wqv: computeWQv(state.manualDepth, state.detectedArea!, state.activeProfile.parameters.rvFormula(100)),
-                fixes: suggestGreenFixes(state.detectedArea!)
-            });
-        }
-        calc();
-    }, [state.detectedArea, state.rainfall, state.intensityMode, state.manualIntensity, state.manualDepth, state.activeProfile, update]);
-}
-
-function useComplianceEffect(state: ARScannerState, services: Services, update: UpdateFn) {
-    useEffect(() => {
-        if (!state.detectedArea || state.fixes.length === 0) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const bmps: BMPSpec[] = state.fixes.map((f: GreenFix) => ({ type: f.type as any, area_m2: f.size }));
-        const pollutantRes = services.pollutant.calculateWithBMPs({
-            area_m2: state.detectedArea, imperviousPercent: 100, annualRainfall_mm: 1000, bmps: bmps
-        });
-        update({ pollutantResult: pollutantRes });
-
-        const grants = getGrants(state.activeProfile.jurisdictionCode);
-        const results = grants.map(gid => services.pdf.complianceService.checkCompliance({
-            jurisdictionCode: state.activeProfile.jurisdictionCode,
-            jurisdictionChain: state.jurisdictionChain?.hierarchy.map(j => j.name) || [], area_m2: state.detectedArea!,
-            retention_in: state.manualDepth / 25.4, peakReduction_percent: calculateTotalReduction(state.fixes, state.detectedArea!),
-            hasBCR: true, bcrValue: 1.8, hasResiliencePlan: true, bmps: bmps, phosphorusRemoval_lb_yr: pollutantRes.phosphorus_lb_yr
-        }, gid));
-        update({ complianceResults: results as ComplianceResult[] });
-    }, [state.detectedArea, state.fixes, state.activeProfile, state.manualDepth, state.jurisdictionChain, update, services]);
-}
-
-function getGrants(code: string): Array<'CFPF' | 'SLAF' | 'BRIC' | 'BENE2'> {
-    const grants: Array<'CFPF' | 'SLAF' | 'BRIC' | 'BENE2'> = ['CFPF', 'SLAF', 'BRIC'];
-    if (code.startsWith('DE-BE')) grants.push('BENE2');
-    return grants;
-}
-
-function useScanEffect(state: ARScannerState, update: UpdateFn) {
-    const active = state.isDetecting && state.isScanning && !state.isLocked;
-    const voxelManagerRef = useRef(new VoxelManager(0.05)); // 5cm grid for survey-grade precision
-    const sfmOptimizerRef = useRef(new SfMOptimizer());
-    const positionRef = useRef({ x: 0, y: 0 });
-
-    useEffect(() => {
-        if (!active) return;
-
-        // Use requestAnimationFrame for smooth updates
-        let animationId: number;
-        let frameCount = 0;
-
-        const tick = () => {
-            // Simulate movement based on device orientation or mouse
-            // In production, this would use actual DeviceOrientationEvent
-            positionRef.current.x += (Math.random() - 0.5) * 0.1; // Smaller steps for 5cm grid
-            positionRef.current.y += (Math.random() - 0.5) * 0.1;
-
-            const isNew = voxelManagerRef.current.paint(
-                positionRef.current.x,
-                positionRef.current.y
-            );
-
-            // Track frames for SfM bundle adjustment (every 5 frames)
-            frameCount++;
-            if (frameCount % 5 === 0) {
-                sfmOptimizerRef.current.addFrame(
-                    positionRef.current,
-                    voxelManagerRef.current.getVoxelCount()
-                );
-            }
-
-            if (isNew) {
-                const area = voxelManagerRef.current.getArea();
-                update({
-                    detectedArea: area,
-                    scanProgress: Math.min((voxelManagerRef.current.getVoxelCount() / 400) * 100, 100) // 400 voxels = 1m²
-                });
-            }
-
-            animationId = requestAnimationFrame(tick);
-        };
-
-        animationId = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(animationId);
-    }, [active, update]);
-
-    // Reset voxels and SfM when scanning stops
-    useEffect(() => {
-        if (!state.isScanning) {
-            voxelManagerRef.current.reset();
-            sfmOptimizerRef.current.reset();
-            positionRef.current = { x: 0, y: 0 };
-        }
-    }, [state.isScanning]);
+    ]);
 }
 
 async function startGrantGeneration(gid: string, state: ARScannerState, services: Services, update: UpdateFn) {
