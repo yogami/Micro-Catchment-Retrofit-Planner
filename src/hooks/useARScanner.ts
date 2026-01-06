@@ -23,7 +23,7 @@ import { useScannerDemo } from './scanner/useScannerDemo';
 import { useScannerHydrology } from './scanner/useScannerHydrology';
 import { useScannerCompliance } from './scanner/useScannerCompliance';
 import { useScannerVoxelMapping } from './scanner/useScannerVoxelMapping';
-import { createDepthSensingService, type DepthMode } from '../lib/depth-sensing';
+import { type DepthMode } from '../lib/depth-sensing';
 
 export interface ARScannerState {
     isScanning: boolean;

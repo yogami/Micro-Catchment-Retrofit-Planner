@@ -4,6 +4,7 @@ import { convertArea, getAreaUnit, convertFlow, getFlowUnit, convertVolume, getV
 import { useCoverageMode } from '../../contexts/FeatureFlagContext';
 import { CoverageHeatmap } from './coverage/CoverageHeatmap';
 import { GuidedCoverageOverlay } from './coverage/GuidedCoverageOverlay';
+import type { Point } from './coverage/BoundaryMarker';
 import { useSpatialCoverage } from '../../hooks/useSpatialCoverage';
 import { useDeviceOrientation } from '../../hooks/useDeviceOrientation';
 import { ResultHeader, ResultFooter } from './ui/ResultDisplay';
@@ -152,7 +153,7 @@ function GuidedSection({ scanner, coverage, pos }: {
             coveragePercent={coverage.stats?.coveragePercent ?? null}
             cameraPosition={pos}
             onComplete={() => scanner.update({ isLocked: true })}
-            onBoundarySet={(p) => coverage.setBoundary(p)}
+            onBoundarySet={(p: Point[]) => coverage.setBoundary(p)}
         />
     );
 }

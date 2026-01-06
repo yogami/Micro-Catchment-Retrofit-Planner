@@ -3,9 +3,7 @@ import { z } from 'zod';
 import {
     createPollutantService,
     POLLUTANTS,
-    BMP_REMOVAL_RATES,
-    URBAN_LOADING_RATES,
-    type BMPType
+    BMP_REMOVAL_RATES
 } from '../../lib/env-calculator';
 
 export const envCalculatorRoutes = new OpenAPIHono();
@@ -36,7 +34,7 @@ const PollutantLoadResultSchema = z.object({
     source: z.string()
 }).openapi('PollutantLoadResult');
 
-const BMPTypeSchema = z.enum(['rain_garden', 'permeable_pavement', 'bioswale', 'green_roof', 'cistern']).openapi('BMPType');
+const BMPTypeSchema = z.enum(['rain_garden', 'permeable_pavement', 'bioswale', 'green_roof', 'tree_planter']).openapi('BMPType');
 
 const BMPSpecSchema = z.object({
     type: BMPTypeSchema,
@@ -59,12 +57,6 @@ const BaselineInputSchema = z.object({
 const RetrofitInputSchema = BaselineInputSchema.extend({
     bmps: z.array(BMPSpecSchema)
 }).openapi('RetrofitInput');
-
-const SLAFSummarySchema = z.object({
-    totalPhosphorusRemoved_lb_yr: z.number(),
-    meetsSLAFThreshold: z.boolean(),
-    originalInput: RetrofitInputSchema
-}).openapi('SLAFSummary');
 
 // --- ROUTES ---
 
@@ -91,7 +83,7 @@ const bmpRatesRoute = createRoute({
     path: '/bmp-rates',
     responses: {
         200: {
-            content: { 'application/json': { schema: z.object({ bmpTypes: z.array(z.string()), rates: z.record(z.any()) }) } },
+            content: { 'application/json': { schema: z.object({ bmpTypes: z.array(z.string()), rates: z.record(z.string(), z.any()) }) } },
             description: 'Get BMP removal rates'
         }
     },

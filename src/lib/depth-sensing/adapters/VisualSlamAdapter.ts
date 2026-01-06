@@ -14,7 +14,6 @@ import { VoxelManager } from '../../../utils/ar/VoxelManager';
 export class VisualSlamAdapter implements DepthSensingPort {
     private voxelManager: VoxelManager;
     private latestFrame: DepthFrame | null = null;
-    private currentPosition = { x: 0, y: 0 };
 
     constructor(voxelSize: number = 0.05) {
         this.voxelManager = new VoxelManager(voxelSize);
@@ -39,8 +38,6 @@ export class VisualSlamAdapter implements DepthSensingPort {
      * Called from animation loop
      */
     updatePosition(x: number, y: number): void {
-        this.currentPosition = { x, y };
-
         // Paint voxel at current position
         this.voxelManager.paint(x, y);
 
@@ -93,7 +90,6 @@ export class VisualSlamAdapter implements DepthSensingPort {
 
     reset(): void {
         this.voxelManager.reset();
-        this.currentPosition = { x: 0, y: 0 };
         this.latestFrame = null;
     }
 

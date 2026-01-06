@@ -2,9 +2,7 @@ import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { z } from 'zod';
 import {
     createComplianceService,
-    createGrantPDFService,
     GRANT_PROGRAMS,
-    GRANT_TEMPLATES,
     type GrantProgramId,
     type ProjectData
 } from '../../lib/grant-generator';
@@ -13,16 +11,10 @@ export const grantGeneratorRoutes = new OpenAPIHono();
 
 // Lazy-loaded services
 let complianceService: ReturnType<typeof createComplianceService> | null = null;
-let pdfService: ReturnType<typeof createGrantPDFService> | null = null;
 
 function getComplianceService() {
     if (!complianceService) complianceService = createComplianceService();
     return complianceService;
-}
-
-function getPDFService() {
-    if (!pdfService) pdfService = createGrantPDFService();
-    return pdfService;
 }
 
 // --- SCHEMAS ---
@@ -41,7 +33,7 @@ const ProjectDataSchema = z.object({
     nitrogenRemoval_lb_yr: z.number().optional(),
     infiltrationRate_mm_hr: z.number().optional(),
     bmps: z.array(z.object({
-        type: z.enum(['rain_garden', 'permeable_pavement', 'bioswale', 'green_roof', 'cistern']),
+        type: z.enum(['rain_garden', 'permeable_pavement', 'bioswale', 'green_roof', 'tree_planter']),
         area_m2: z.number().positive()
     })).default([])
 }).openapi('ProjectData');

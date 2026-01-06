@@ -2,9 +2,7 @@ import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { z } from 'zod';
 import {
     createStormwaterDiscoveryUseCase,
-    STORMWATER_PROFILES,
-    getCountryHierarchy,
-    COUNTRY_HIERARCHIES
+    STORMWATER_PROFILES
 } from '../../lib/geo-regulatory';
 
 export const geoRegulatoryRoutes = new OpenAPIHono();
@@ -28,7 +26,7 @@ const DiscoverRequestSchema = z.object({
 }).openapi('DiscoverRequest');
 
 const DiscoveryResultSchema = z.object({
-    success: z.boolean(),
+    success: z.literal(true),
     profile: z.any().optional(),
     jurisdiction: z.any().optional(),
     chain: z.any().optional()
@@ -62,6 +60,10 @@ const discoverRoute = createRoute({
         200: {
             content: { 'application/json': { schema: DiscoveryResultSchema } },
             description: 'Discover regulatory profile by coordinates'
+        },
+        500: {
+            content: { 'application/json': { schema: z.object({ success: z.literal(false), error: z.string() }) } },
+            description: 'Internal server error'
         }
     },
     tags: ['Geo-Regulatory']
@@ -71,8 +73,8 @@ geoRegulatoryRoutes.openapi(discoverRoute, async (c) => {
     const { lat, lon, domain } = c.req.valid('json');
     try {
         const useCase = getStormwaterUseCase();
-        const result = await useCase.execute({ lat, lon, domain });
-        return c.json({ success: true, ...result });
+        const result = await useCase.execute({ latitude: lat, longitude: lon, domain });
+        return c.json({ success: true as const, ...result }, 200);
     } catch (error) {
         return c.json({ success: false, error: String(error) }, 500);
     }

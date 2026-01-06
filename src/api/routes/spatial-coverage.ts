@@ -1,9 +1,7 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { z } from 'zod';
 import {
-    createCoverageService,
-    Boundary,
-    CoverageAnalyzer
+    createCoverageService
 } from '../../lib/spatial-coverage';
 
 export const spatialCoverageRoutes = new OpenAPIHono();
