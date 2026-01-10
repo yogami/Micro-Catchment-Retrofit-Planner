@@ -24,7 +24,7 @@
     "@hono/swagger-ui": "^0.5.3",
     "@hono/zod-openapi": "^1.2.0",
     "@hono/zod-validator": "^0.7.6",
-    "@supabase/supabase-js": "^2.89.0",
+    "@supabase/supabase-js": "^2.90.1",
     "@tensorflow/tfjs": "^4.22.0",
     "hono": "^4.11.3",
     "html2canvas": "^1.4.1",
