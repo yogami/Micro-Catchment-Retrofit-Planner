@@ -1,4 +1,4 @@
-import { useRef, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import type { Voxel, Point } from '../../../lib/spatial-coverage';
 import { BoundaryMarker } from './BoundaryMarker';
 import { useBoundaryMarker } from '../../../hooks/useBoundaryMarker';
@@ -10,6 +10,8 @@ import {
     useInitialBoundaryEffect
 } from './hooks/useCoverageManagement';
 import { MapHeader, OutOfBoundsAlert } from './ui/StatusOverlays';
+
+import { ScreenToWorld } from './ui/MapViewport';
 
 interface GuidedCoverageOverlayProps {
     voxels: Voxel[];
@@ -34,25 +36,36 @@ export function GuidedCoverageOverlay({
 }: GuidedCoverageOverlayProps) {
     const { boundary, isMarking, startMarking, completeBoundary } = useBoundaryMarker();
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const overlayRef = useRef<HTMLDivElement>(null);
+
+    // Track viewport size for mapping screen taps to world coordinates
+    const [viewport, setViewport] = useState({ width: 1, height: 1 });
+    useEffect(() => {
+        if (overlayRef.current) {
+            const rect = overlayRef.current.getBoundingClientRect();
+            setViewport({ width: rect.width || 1, height: rect.height || 1 });
+        }
+    }, [isMarking]);
 
     const isComplete = useCoverageAutoCompletion(coveragePercent, onComplete);
-    const isOutOfBounds = useCameraContainment(boundary, cameraPosition, audioRef);
+    const isOutOfBounds = useCameraContainment(boundary, cameraPosition, audioRef, viewport);
 
     useInitialBoundaryEffect(boundary, isMarking, startMarking);
 
     const handleBoundaryComplete = useCallback((points: Point[]) => {
         completeBoundary(points);
-        onBoundarySet(points.map(p => ({ x: p.x * 0.01, y: p.y * 0.01 })));
-    }, [completeBoundary, onBoundarySet]);
+        // Map pixel coordinates to the meters coordinate system where (0,0) is bottom-center
+        onBoundarySet(points.map(p => ScreenToWorld.map(p, viewport.width, viewport.height)));
+    }, [completeBoundary, onBoundarySet, viewport]);
 
     const scaledBoundary = useMemo(() =>
-        boundary?.map(p => ({ x: p.x * 0.01, y: p.y * 0.01 })) ?? null,
-        [boundary]);
+        boundary?.map(p => ScreenToWorld.map(p, viewport.width, viewport.height)) ?? null,
+        [boundary, viewport]);
 
     if (isComplete) return <CompleteOverlay />;
 
     return (
-        <div className="absolute inset-0 z-50 pointer-events-none" data-testid="guided-coverage-overlay">
+        <div ref={overlayRef} className="absolute inset-0 z-50 pointer-events-none" data-testid="guided-coverage-overlay">
             <MarkingLayer show={isMarking} onComplete={handleBoundaryComplete} />
             <MapOverlay
                 voxels={voxels}

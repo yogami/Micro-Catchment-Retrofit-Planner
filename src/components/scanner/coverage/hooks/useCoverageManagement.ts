@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import type { Point } from '../../../../lib/spatial-coverage';
 import { Boundary } from '../../../../lib/spatial-coverage';
 
+import { ScreenToWorld } from '../ui/MapViewport';
+
 const AUTO_COMPLETE_THRESHOLD = 98;
 
 export function useCoverageAutoCompletion(percent: number | null, onComplete: () => void) {
@@ -25,12 +27,20 @@ export function useCoverageAutoCompletion(percent: number | null, onComplete: ()
     return isComplete;
 }
 
-export function useCameraContainment(boundary: Point[] | null, cam: { x: number; y: number }, audio: React.RefObject<HTMLAudioElement | null>) {
+export function useCameraContainment(
+    boundary: Point[] | null,
+    cam: { x: number; y: number },
+    audio: React.RefObject<HTMLAudioElement | null>,
+    viewportSize?: { width: number; height: number }
+) {
     const isOutOfBounds = useMemo(() => {
-        if (!boundary) return false;
-        const poly = new Boundary(boundary.map(p => ({ x: p.x * 0.01, y: p.y * 0.01 })));
+        if (!boundary || !viewportSize) return false;
+
+        const worldBoundary = boundary.map(p => ScreenToWorld.map(p, viewportSize.width, viewportSize.height));
+        const poly = new Boundary(worldBoundary);
+
         return !poly.contains(cam.x, cam.y);
-    }, [boundary, cam]);
+    }, [boundary, cam, viewportSize]);
 
     useEffect(() => {
         if (isOutOfBounds && audio.current) {

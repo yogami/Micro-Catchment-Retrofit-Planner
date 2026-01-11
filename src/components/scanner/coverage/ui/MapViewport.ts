@@ -11,6 +11,19 @@ export interface Bounds {
 }
 
 /**
+ * ScreenToWorld - Consistent mapping between screen pixels and world meters.
+ * Origin (0,0 meters) is mapped to the bottom-center of the viewport.
+ */
+export const ScreenToWorld = {
+    map(p: Point, width: number, height: number): Point {
+        return {
+            x: (p.x - width / 2) * 0.01,
+            y: (height - p.y) * 0.01
+        };
+    }
+};
+
+/**
  * BoundsCalculator - Pure logic for determining the visible area of the map.
  * CC=1
  */
