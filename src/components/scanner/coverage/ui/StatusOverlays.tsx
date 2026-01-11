@@ -1,4 +1,3 @@
-import { Point } from '../../../../lib/spatial-coverage';
 
 export function MapHeader({ percent }: { percent: number | null }) {
     const display = percent !== null ? `${percent.toFixed(0)}%` : '0%';

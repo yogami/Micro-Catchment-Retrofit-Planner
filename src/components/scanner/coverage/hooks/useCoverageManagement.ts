@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import type { Point } from '../../../../lib/spatial-coverage';
 import { Boundary } from '../../../../lib/spatial-coverage';
 
