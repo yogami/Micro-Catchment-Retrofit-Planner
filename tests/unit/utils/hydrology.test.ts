@@ -8,13 +8,9 @@ import {
     computeTreePlanterCount,
     calculateTotalReduction,
     suggestGreenFixes,
-    rainGardenAreaFromVolume,
     formatRunoffDisplay,
     RUNOFF_COEFFICIENTS,
-    getProfileForLocation,
-    computeWQv,
-    computeRegionalWQv,
-    REGULATION_PROFILES
+    computeWQv
 } from '../../../src/utils/hydrology';
 
 describe('Peak Runoff Calculations', () => {
@@ -63,110 +59,6 @@ describe('Water Quality Volume', () => {
             expect(computeWQv(25.4, 0)).toBe(0);
         });
     });
-
-    describe('computeRegionalWQv', () => {
-        it('computes using Virginia profile', () => {
-            const profile = REGULATION_PROFILES.VA;
-            const result = computeRegionalWQv(30.48, 100, profile);
-            // rvFormula for 100% impervious = 0.05 + 0.009*100 = 0.95
-            expect(result).toBeCloseTo(2895.6, 0);
-        });
-
-        it('computes using Berlin profile', () => {
-            const profile = REGULATION_PROFILES.BE;
-            const result = computeRegionalWQv(30, 100, profile);
-            // BE rvFormula returns 0.9
-            expect(result).toBeCloseTo(2700, 0);
-        });
-
-        it('computes using DEFAULT profile', () => {
-            const profile = REGULATION_PROFILES.DEFAULT;
-            const result = computeRegionalWQv(25.4, 100, profile);
-            expect(result).toBeCloseTo(2286, 0);
-        });
-    });
-});
-
-describe('Regional Profile Lookup', () => {
-    describe('getProfileForLocation', () => {
-        it('returns Virginia profile for Fairfax coordinates', () => {
-            const profile = getProfileForLocation(38.85, -77.30);
-            expect(profile.id).toBe('VA');
-            expect(profile.name).toContain('Virginia');
-        });
-
-        it('returns NYC profile for Manhattan coordinates', () => {
-            const profile = getProfileForLocation(40.7, -74.0);
-            expect(profile.name).toContain('NYC');
-        });
-
-        it('returns California profile for LA coordinates', () => {
-            const profile = getProfileForLocation(34.0, -118.0);
-            expect(profile.name).toContain('California');
-        });
-
-        it('returns London profile for London coordinates', () => {
-            const profile = getProfileForLocation(51.5, -0.1);
-            expect(profile.name).toContain('London');
-        });
-
-        it('returns Berlin profile for Berlin coordinates', () => {
-            const profile = getProfileForLocation(52.52, 13.405);
-            expect(profile.id).toBe('BE');
-            expect(profile.name).toContain('Berlin');
-        });
-
-        it('returns DEFAULT profile for unknown location', () => {
-            const profile = getProfileForLocation(0, 0);
-            expect(profile.id).toBe('DEFAULT');
-        });
-
-        it('returns DEFAULT for Antarctica', () => {
-            const profile = getProfileForLocation(-80, 0);
-            expect(profile.id).toBe('DEFAULT');
-        });
-
-        it('returns DEFAULT for middle of Pacific', () => {
-            const profile = getProfileForLocation(0, -150);
-            expect(profile.id).toBe('DEFAULT');
-        });
-    });
-});
-
-describe('Regulation Profile rvFormulas', () => {
-    it('VA rvFormula matches EPA formula', () => {
-        const va = REGULATION_PROFILES.VA;
-        expect(va.rvFormula(0)).toBeCloseTo(0.05, 2);
-        expect(va.rvFormula(50)).toBeCloseTo(0.5, 2);
-        expect(va.rvFormula(100)).toBeCloseTo(0.95, 2);
-    });
-
-    it('NYC rvFormula matches NYC formula', () => {
-        const nyc = REGULATION_PROFILES.NYC;
-        expect(nyc.rvFormula(0)).toBeCloseTo(0.05, 2);
-        expect(nyc.rvFormula(100)).toBeCloseTo(0.95, 2);
-    });
-
-    it('CA rvFormula returns constant', () => {
-        const ca = REGULATION_PROFILES.CA;
-        // CA rvFormula returns a constant value
-        expect(ca.rvFormula(0)).toBeCloseTo(ca.rvFormula(100), 2);
-    });
-
-    it('LDN rvFormula returns constant 0.9', () => {
-        const ldn = REGULATION_PROFILES.LDN;
-        expect(ldn.rvFormula(0)).toBeCloseTo(0.9, 2);
-    });
-
-    it('BE rvFormula returns constant 0.9', () => {
-        const be = REGULATION_PROFILES.BE;
-        expect(be.rvFormula(50)).toBeCloseTo(0.9, 2);
-    });
-
-    it('DEFAULT rvFormula returns constant 0.9', () => {
-        const def = REGULATION_PROFILES.DEFAULT;
-        expect(def.rvFormula(75)).toBeCloseTo(0.9, 2);
-    });
 });
 
 describe('BMP Sizing', () => {
@@ -189,20 +81,6 @@ describe('BMP Sizing', () => {
 
         it('returns 0 for zero runoff', () => {
             expect(sizeRainGarden(0, 1, 0.8)).toBe(0);
-        });
-    });
-
-    describe('rainGardenAreaFromVolume', () => {
-        it('calculates area with default depth', () => {
-            expect(rainGardenAreaFromVolume(3600, 0.3)).toBeCloseTo(12, 0);
-        });
-
-        it('calculates area with custom depth', () => {
-            expect(rainGardenAreaFromVolume(1000, 0.5)).toBeCloseTo(2, 0);
-        });
-
-        it('returns 0 for zero volume', () => {
-            expect(rainGardenAreaFromVolume(0, 0.3)).toBe(0);
         });
     });
 

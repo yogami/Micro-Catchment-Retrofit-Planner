@@ -44,3 +44,7 @@ pnpm-debug.log*
 
 # Misc
 *.log
+
+# Agent Context Injections
+.agent_rules.md
+.agent_catalog.md

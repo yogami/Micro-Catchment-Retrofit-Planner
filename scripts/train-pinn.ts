@@ -12,6 +12,7 @@ import { createPINNModel } from '../src/ml/pinnModel.js';
 import { generateTrainingData, splitDataset } from '../src/ml/syntheticData.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { normalize, normalizeOutput } from '../src/ml/pinnConstants.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,26 +22,14 @@ const EPOCHS = 5;
 const LEARNING_RATE = 0.001;
 const MODEL_SAVE_PATH = `file://${path.join(__dirname, '../public/models/pinn_runoff')}`;
 
-const NORMALIZATION = {
-    x: { min: 0, max: 200 },
-    t: { min: 0, max: 120 },
-    rainfall: { min: 0, max: 150 },
-    slope: { min: 0.001, max: 0.2 },
-    manningN: { min: 0.01, max: 0.1 },
-};
-
-function normalizeInput(inputs: number[]): number[] {
+function normalizeInputRow(inputs: number[]): number[] {
     return [
-        (inputs[0] - NORMALIZATION.x.min) / (NORMALIZATION.x.max - NORMALIZATION.x.min),
-        (inputs[1] - NORMALIZATION.t.min) / (NORMALIZATION.t.max - NORMALIZATION.t.min),
-        (inputs[2] - NORMALIZATION.rainfall.min) / (NORMALIZATION.rainfall.max - NORMALIZATION.rainfall.min),
-        (inputs[3] - NORMALIZATION.slope.min) / (NORMALIZATION.slope.max - NORMALIZATION.slope.min),
-        (inputs[4] - NORMALIZATION.manningN.min) / (NORMALIZATION.manningN.max - NORMALIZATION.manningN.min),
+        normalize(inputs[0], 'x'),
+        normalize(inputs[1], 't'),
+        normalize(inputs[2], 'rainfall'),
+        normalize(inputs[3], 'slope'),
+        normalize(inputs[4], 'manningN'),
     ];
-}
-
-function normalizeOutput(output: number): number {
-    return output / 200;
 }
 
 async function train() {
@@ -55,10 +44,10 @@ async function train() {
     const dataset = generateTrainingData();
     const { train: trainingSet, val } = splitDataset(dataset.samples, 0.9);
 
-    const trainInputs = tf.tensor2d(trainingSet.map(s => normalizeInput(s.inputs)));
+    const trainInputs = tf.tensor2d(trainingSet.map(s => normalizeInputRow(s.inputs)));
     const trainLabels = tf.tensor2d(trainingSet.map(s => [normalizeOutput(s.output)]));
 
-    const valInputs = tf.tensor2d(val.map(s => normalizeInput(s.inputs)));
+    const valInputs = tf.tensor2d(val.map(s => normalizeInputRow(s.inputs)));
     const valLabels = tf.tensor2d(val.map(s => [normalizeOutput(s.output)]));
 
     console.log(`Training on ${trainingSet.length} samples...`);

@@ -80,7 +80,7 @@ describe('useScannerDemo', () => {
     });
 
     it('handles discovery failure gracefully', async () => {
-        mockDiscovery.execute.mockRejectedValue(new Error('Discovery failed'));
+        (openMeteoClient.getDesignStorm as jest.Mock).mockRejectedValue(new Error('Meteo failed'));
 
         const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
 
@@ -90,6 +90,7 @@ describe('useScannerDemo', () => {
 
         await new Promise(r => setTimeout(r, 50));
 
+        expect(mockUpdate).toHaveBeenCalledWith({ isLoadingRainfall: true });
         expect(mockUpdate).toHaveBeenCalledWith({ isLoadingRainfall: false });
 
         consoleSpy.mockRestore();

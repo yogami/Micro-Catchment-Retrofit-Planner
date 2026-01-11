@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
-import { getRobustRunoffPrediction, initPINNEngine } from './pinnInference';
-import { computeRationalMethod } from './pinnModel';
+import { getRobustRunoffPrediction, initPINNEngine } from '../../../src/ml/pinnInference';
+import { computePeakRunoff } from '../../../src/utils/hydrology';
 
 describe('PINN Inference Engine', () => {
 
@@ -21,7 +21,7 @@ describe('PINN Inference Engine', () => {
         const prediction = await getRobustRunoffPrediction(rainfall, area);
 
         // Rational method baseline: ~1.125 L/s
-        const rational = computeRationalMethod(rainfall, area);
+        const rational = computePeakRunoff(rainfall, area, 0.9);
 
         // Prediction should be within reasonable bounds of rational method
         // (Since we are using fallback or untrained model in test env, it might default to Rational)

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { ValidationChart } from './ValidationChart';
-import { getHecRasPeakLs, HEC_RAS_PEAK } from '../utils/hecRasConstants';
+import { ValidationChart } from '../../../src/components/ValidationChart';
+import { getHecRasPeakLs, HEC_RAS_PEAK } from '../../../src/utils/hecRasConstants';
 
 describe('ValidationChart', () => {
     describe('Rendering checks', () => {

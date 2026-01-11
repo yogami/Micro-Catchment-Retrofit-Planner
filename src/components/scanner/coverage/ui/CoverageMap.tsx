@@ -1,21 +1,31 @@
 import type { Voxel } from '../../../../lib/spatial-coverage';
 import { useRef, useEffect } from 'react';
-import { calculateVoxelBounds } from './CoverageUtils';
+import { BoundsCalculator, MapViewport, type Point } from './MapViewport';
 
 interface CoverageMapProps {
     voxels: Voxel[];
-    cameraPosition: { x: number; y: number };
+    cameraPosition: Point;
     isOutOfBounds: boolean;
     size: number;
+    boundary?: Point[] | null;
 }
 
-export function CoverageMap({ voxels, cameraPosition, isOutOfBounds, size }: CoverageMapProps) {
+/**
+ * CoverageMap - Renders the guided mini-map using a strategy-based drawing approach.
+ * Adheres to CC <= 3 and SOLID principles.
+ */
+export function CoverageMap({ voxels, cameraPosition, isOutOfBounds, size, boundary }: CoverageMapProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
         const ctx = canvasRef.current?.getContext('2d');
-        if (ctx) renderCoverage({ ctx, voxels, cam: cameraPosition, isOutOfBounds, size });
-    }, [voxels, cameraPosition, size, isOutOfBounds]);
+        if (!ctx) return;
+
+        const bounds = BoundsCalculator.calculate(cameraPosition, voxels, boundary);
+        const viewport = new MapViewport(bounds, size);
+
+        renderScene(ctx, { voxels, cam: cameraPosition, isOutOfBounds, size, boundary, viewport });
+    }, [voxels, cameraPosition, size, isOutOfBounds, boundary]);
 
     return (
         <canvas
@@ -28,56 +38,69 @@ export function CoverageMap({ voxels, cameraPosition, isOutOfBounds, size }: Cov
     );
 }
 
-interface RenderParams {
-    ctx: CanvasRenderingContext2D;
+interface SceneData {
     voxels: Voxel[];
-    cam: { x: number; y: number };
+    cam: Point;
     isOutOfBounds: boolean;
     size: number;
+    boundary?: Point[] | null;
+    viewport: MapViewport;
 }
 
-function renderCoverage({ ctx, voxels, cam, isOutOfBounds, size }: RenderParams) {
+/**
+ * Orchestrates the drawing of all layers. CC=1
+ */
+function renderScene(ctx: CanvasRenderingContext2D, data: SceneData) {
+    drawBackground(ctx, data.size);
+    drawVoxels(ctx, data.voxels, data.viewport);
+    if (data.boundary) drawBoundary(ctx, data.boundary, data.viewport);
+    drawCamera(ctx, data.cam, data.viewport);
+    drawFrame(ctx, data.isOutOfBounds, data.size);
+}
+
+function drawBackground(ctx: CanvasRenderingContext2D, size: number) {
     ctx.fillStyle = '#1f2937';
     ctx.fillRect(0, 0, size, size);
-
-    if (voxels.length === 0) return;
-
-    const bounds = calculateVoxelBounds(voxels);
-    const scale = Math.min(size / (bounds.maxX - bounds.minX + 1), size / (bounds.maxY - bounds.minY + 1));
-
-    drawVoxels(ctx, voxels, bounds, scale);
-
-    const camX = (cam.x - bounds.minX) * scale;
-    const camY = (cam.y - bounds.minY) * scale;
-    drawCameraDot(ctx, camX, camY);
-
-    ctx.strokeStyle = isOutOfBounds ? '#ef4444' : '#4ade80';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, size - 2, size - 2);
 }
 
-interface Bounds {
-    minX: number;
-    maxX: number;
-    minY: number;
-    maxY: number;
-}
-
-function drawVoxels(ctx: CanvasRenderingContext2D, voxels: Voxel[], bounds: Bounds, scale: number) {
+function drawVoxels(ctx: CanvasRenderingContext2D, voxels: Voxel[], vp: MapViewport) {
     ctx.fillStyle = '#3b82f6';
-    voxels.forEach(voxel => {
-        const x = (voxel.gridX - bounds.minX) * scale;
-        const y = (voxel.gridY - bounds.minY) * scale;
-        ctx.fillRect(x, y, Math.max(1, scale - 1), Math.max(1, scale - 1));
+    voxels.forEach(v => {
+        const p = vp.project(v.worldX, v.worldY);
+        const s = vp.projectSize(v.voxelSize);
+        ctx.fillRect(p.x - s / 2, p.y - s / 2, Math.max(1, s), Math.max(1, s));
     });
 }
 
-function drawCameraDot(ctx: CanvasRenderingContext2D, x: number, y: number) {
+function drawBoundary(ctx: CanvasRenderingContext2D, boundary: Point[], vp: MapViewport) {
+    if (boundary.length < 2) return;
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    boundary.forEach((p, i) => {
+        const screenP = vp.project(p.x, p.y);
+        if (i === 0) ctx.moveTo(screenP.x, screenP.y);
+        else ctx.lineTo(screenP.x, screenP.y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+function drawCamera(ctx: CanvasRenderingContext2D, cam: Point, vp: MapViewport) {
+    const p = vp.project(cam.x, cam.y);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
     ctx.fillStyle = '#22c55e';
     ctx.fill();
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.stroke();
+}
+
+function drawFrame(ctx: CanvasRenderingContext2D, isOutOfBounds: boolean, size: number) {
+    ctx.strokeStyle = isOutOfBounds ? '#ef4444' : '#4ade80';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, size - 2, size - 2);
 }

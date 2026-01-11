@@ -1,5 +1,5 @@
 import { Given, When, Then, Before } from '@cucumber/cucumber';
-import { expect } from '@jest/globals';
+import * as assert from 'node:assert';
 
 let mockSession: { user: { email: string } | null } = { user: null };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,7 +22,7 @@ Before(() => {
 
 Given('I am on the landing page', function () {
     currentPage = '/';
-    expect(currentPage).toBe('/');
+    assert.strictEqual(currentPage, '/');
 });
 
 When('I click "Start Scan" and enter my email {string}', async function (email: string) {
@@ -30,17 +30,17 @@ When('I click "Start Scan" and enter my email {string}', async function (email: 
 });
 
 Then('Supabase creates a user session', function () {
-    expect(mockSession.user).not.toBeNull();
+    assert.ok(mockSession.user);
 });
 
 Then('I am redirected to the AR scanner', function () {
     currentPage = '/scanner';
-    expect(currentPage).toBe('/scanner');
+    assert.strictEqual(currentPage, '/scanner');
 });
 
 Given('I am logged in', function () {
     mockSession = { user: { email: 'test@berlin.de' } };
-    expect(mockSession.user).not.toBeNull();
+    assert.ok(mockSession.user);
 });
 
 Given('I have scanned a street with impervious surfaces', function () {
@@ -65,13 +65,13 @@ When('I click "Save Project"', function () {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 Then('the project saves to Supabase with:', function (_dataTable: unknown) {
     const project = mockProjects.get(this.savedProjectId) as MockProject;
-    expect(project).toBeDefined();
-    expect(project.street_name).toBe(this.projectName);
+    assert.ok(project);
+    assert.strictEqual(project.street_name, this.projectName);
 });
 
 Then('a shareable URL is generated', function () {
     const shareUrl = `/project/${this.savedProjectId}`;
-    expect(shareUrl).toContain('/project/');
+    assert.ok(shareUrl.includes('/project/'));
 });
 
 Given('I have a saved project with URL {string}', function (url: string) {
@@ -86,9 +86,9 @@ When('I navigate to that URL', function () {
 
 Then('I see the project details and AR screenshot', function () {
     const id = this.projectUrl.split('/').pop()!;
-    expect(mockProjects.has(id)).toBe(true);
+    assert.ok(mockProjects.has(id));
 });
 
 Then('I can export or continue editing', function () {
-    expect(true).toBe(true);
+    assert.ok(true);
 });

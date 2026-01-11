@@ -1,4 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
+import { computePeakRunoff } from '../utils/hydrology';
+import { normalize, denormalizeOutput } from './pinnConstants';
 
 let isTfInitialized = false;
 
@@ -122,22 +124,8 @@ export async function getModel(): Promise<tf.Sequential> {
 
 // ============ Normalization ============
 
-const NORMALIZATION = {
-    x: { min: 0, max: 200 },
-    t: { min: 0, max: 120 },
-    rainfall: { min: 0, max: 150 },
-    slope: { min: 0.001, max: 0.2 },
-    manningN: { min: 0.01, max: 0.1 },
-};
-
-function normalize(value: number, key: keyof typeof NORMALIZATION): number {
-    const { min, max } = NORMALIZATION[key];
-    return (value - min) / (max - min);
-}
-
-function denormalizeDischarge(value: number, input: PINNInput): number {
-    const rainLitersPerSecond = (input.rainfall / 3600) * 100;
-    return value * rainLitersPerSecond;
+function denormalizeDischarge(value: number): number {
+    return denormalizeOutput(value);
 }
 
 function calculateDepthAndVelocity(discharge: number, input: PINNInput): { depth: number; velocity: number } {
@@ -171,7 +159,7 @@ export async function predictRunoff(input: PINNInput): Promise<PINNOutput> {
     inputTensor.dispose();
     outputTensor.dispose();
 
-    const discharge = input.t <= 0 ? 0 : denormalizeDischarge(rawOutput, input);
+    const discharge = input.t <= 0 ? 0 : denormalizeDischarge(rawOutput);
     const { depth, velocity } = calculateDepthAndVelocity(discharge, input);
 
     return {
@@ -208,13 +196,7 @@ export function computeKinematicWaveSolution(params: KinematicWaveParams): Kinem
 /**
  * Fallback to rational method if PINN fails
  */
-export function computeRationalMethod(
-    rainfall: number,
-    area: number,
-    coefficient: number = 0.9
-): number {
-    return (coefficient * rainfall * area) / 3600;
-}
+export const computeRationalMethod = computePeakRunoff;
 
 /**
  * Get runoff prediction with PINN, falling back to rational method

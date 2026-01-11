@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { ModelPlacement } from './ModelPlacement';
-import type { GreenFix } from '../utils/hydrology';
+import { ModelPlacement } from '../../../src/components/ModelPlacement';
+import type { GreenFix } from '../../../src/utils/hydrology';
 
 describe('AR Model Placement', () => {
     const mockFixes: GreenFix[] = [

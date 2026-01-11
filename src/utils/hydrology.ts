@@ -21,123 +21,12 @@ export async function computeRunoffWithPINN(
 }
 
 /** Runoff coefficients for different surface types */
-
-/** Runoff coefficients for different surface types */
 export const RUNOFF_COEFFICIENTS = {
     impervious: 0.95,
     pervious: 0.25,
     permeablePaving: 0.45
 };
 
-export interface RegulationProfile {
-    id: 'VA' | 'BE' | 'DEFAULT';
-    name: string;
-    description: string;
-    designDepth_mm: number;
-    designIntensity_mm_hr: number;
-    rvFormula: (imperviousPercent: number) => number;
-    units: 'imperial' | 'metric';
-    authorityUrl?: string;
-}
-
-export const REGULATION_PROFILES: Record<string, RegulationProfile> = {
-    VA: {
-        id: 'VA',
-        name: 'Virginia Stormwater Handbook (9VAC25-870)',
-        description: 'US EPA/Virginia DEQ standards for Northern Virginia.',
-        designDepth_mm: 30.48, // 1.2 inches
-        designIntensity_mm_hr: 50.8,
-        rvFormula: (i) => 0.05 + (0.009 * i),
-        units: 'imperial',
-        authorityUrl: 'https://www.deq.virginia.gov/'
-    },
-    NYC: {
-        id: 'VA', // Shared ID space for mapping
-        name: 'NYC Unified Stormwater Rule (USWR)',
-        description: 'NYC DEP 90th percentile retention standard.',
-        designDepth_mm: 38.1, // 1.5 inches
-        designIntensity_mm_hr: 45.0,
-        rvFormula: (i) => 0.05 + (0.009 * i),
-        units: 'imperial',
-        authorityUrl: 'https://www1.nyc.gov/site/dep/index.page'
-    },
-    CA: {
-        id: 'VA',
-        name: 'California LID Standards (CASQA)',
-        description: 'California 85th percentile storm event capture.',
-        designDepth_mm: 19.05, // 0.75 inches
-        designIntensity_mm_hr: 40.0,
-        rvFormula: () => 0.9,
-        units: 'imperial',
-        authorityUrl: 'https://www.casqa.org/'
-    },
-    LDN: {
-        id: 'BE',
-        name: 'London SuDS Design Guide',
-        description: 'Greater London Authority 25mm first flush capture.',
-        designDepth_mm: 25.0,
-        designIntensity_mm_hr: 50.0,
-        rvFormula: () => 0.9,
-        units: 'metric',
-        authorityUrl: 'https://www.london.gov.uk/'
-    },
-    BE: {
-        id: 'BE',
-        name: 'Berliner Regenwasseragentur (Schwammstadt)',
-        description: 'German DWA-A 138 / Sponge City Berlin guidelines.',
-        designDepth_mm: 30.0,
-        designIntensity_mm_hr: 45.0,
-        rvFormula: () => 0.9,
-        units: 'metric',
-        authorityUrl: 'https://regenwasseragentur.berlin/'
-    },
-    DEFAULT: {
-        id: 'DEFAULT',
-        name: 'WHO/EPA Global Baseline',
-        description: 'Generalized 25mm / 1-inch target for regions without local handbooks.',
-        designDepth_mm: 25.4,
-        designIntensity_mm_hr: 50.0,
-        rvFormula: () => 0.9,
-        units: 'metric'
-    }
-};
-
-interface BBox {
-    minLat: number;
-    maxLat: number;
-    minLon: number;
-    maxLon: number;
-}
-
-const REGION_BOUNDS: Record<string, BBox> = {
-    VA: { minLat: 37.0, maxLat: 40.0, minLon: -78.0, maxLon: -75.0 },
-    NYC: { minLat: 40.5, maxLat: 41.0, minLon: -74.3, maxLon: -73.7 },
-    LDN: { minLat: 51.3, maxLat: 51.7, minLon: -0.5, maxLon: 0.3 },
-    CA: { minLat: 32.5, maxLat: 38.0, minLon: -124.5, maxLon: -116.0 },
-    BE: { minLat: 52.3, maxLat: 52.7, minLon: 13.0, maxLon: 13.7 }
-};
-
-function isInBBox(lat: number, lon: number, bbox: BBox): boolean {
-    if (lat <= bbox.minLat) return false;
-    if (lat >= bbox.maxLat) return false;
-    return isLonInBBox(lon, bbox);
-}
-
-function isLonInBBox(lon: number, bbox: BBox): boolean {
-    return lon > bbox.minLon && lon < bbox.maxLon;
-}
-
-/**
- * Geographic lookup for regulation profile with expanded global regions
- */
-export function getProfileForLocation(lat: number, lon: number): RegulationProfile {
-    for (const [key, bbox] of Object.entries(REGION_BOUNDS)) {
-        if (isInBBox(lat, lon, bbox)) {
-            return REGULATION_PROFILES[key];
-        }
-    }
-    return REGULATION_PROFILES.DEFAULT;
-}
 export type SurfaceType = keyof typeof RUNOFF_COEFFICIENTS;
 
 export interface GreenFix {
@@ -167,7 +56,7 @@ export interface PermeableCapacity {
 export function computePeakRunoff(
     rainfall_mm_hr: number,
     area_m2: number,
-    coeff: number
+    coeff: number = 0.9
 ): number {
     // mm/hr × m² = L/hr, divide by 3600 for L/s
     return (rainfall_mm_hr * area_m2 * coeff) / 3600;
@@ -189,18 +78,6 @@ export function computeWQv(
 ): number {
     // mm * m² = L
     return depth_mm * area_m2 * coeff;
-}
-
-/**
- * Compute WQv with regional Rv formula
- */
-export function computeRegionalWQv(
-    depth_mm: number,
-    area_m2: number,
-    profile: RegulationProfile
-): number {
-    const rv = profile.rvFormula(100); // Assuming 100% impervious catchments for scanning
-    return depth_mm * area_m2 * rv;
 }
 
 /**

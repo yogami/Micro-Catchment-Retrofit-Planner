@@ -1,4 +1,4 @@
-import { exportProjectPDF, type PDFExportData } from './pdfExport';
+import { exportProjectPDF, type PDFExportData } from '../../../src/services/pdfExport';
 
 // Mock html2canvas
 jest.mock('html2canvas', () => ({

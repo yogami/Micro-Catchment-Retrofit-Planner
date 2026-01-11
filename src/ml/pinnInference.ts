@@ -7,7 +7,8 @@
 
 import * as tf from '@tensorflow/tfjs';
 import { createPINNModel, type PINNInput, type PINNOutput } from './pinnModel';
-import { computeRationalMethod } from './pinnModel';
+import { normalize, OUTPUT_SCALE } from './pinnConstants';
+import { computePeakRunoff } from '../utils/hydrology';
 
 const MODEL_URL = '/models/pinn_runoff/model.json';
 
@@ -15,19 +16,7 @@ const MODEL_URL = '/models/pinn_runoff/model.json';
 let loadedModel: tf.LayersModel | tf.Sequential | null = null;
 let isLoading = false;
 
-// Matches training normalization
-const NORMALIZATION = {
-    x: { min: 0, max: 200 },
-    t: { min: 0, max: 120 },
-    rainfall: { min: 0, max: 150 },
-    slope: { min: 0.001, max: 0.2 },
-    manningN: { min: 0.01, max: 0.1 },
-};
 
-function normalize(value: number, key: keyof typeof NORMALIZATION): number {
-    const { min, max } = NORMALIZATION[key];
-    return (value - min) / (max - min);
-}
 
 /**
  * Initialize the PINN inference engine
@@ -99,7 +88,7 @@ export async function runPINNInference(input: PINNInput): Promise<PINNOutput> {
     const discharge = tf.tidy(() => {
         const inputTensor = tf.tensor2d([normalizeInput(input)]);
         const outputTensor = loadedModel!.predict(inputTensor) as tf.Tensor;
-        return outputTensor.dataSync()[0] * 200; // Denormalization
+        return outputTensor.dataSync()[0] * OUTPUT_SCALE; // Denormalization
     });
 
     return buildOutput(discharge, input);
@@ -144,7 +133,7 @@ export async function getRobustRunoffPrediction(
     area: number,
     slope: number = 0.02
 ): Promise<number> {
-    const rational = computeRationalMethod(rainfall, area);
+    const rational = computePeakRunoff(rainfall, area);
     const input: PINNInput = { x: 100, t: 60, rainfall, slope, manningN: 0.015 };
     return tryPINN(input, rational);
 }

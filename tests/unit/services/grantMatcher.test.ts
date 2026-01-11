@@ -1,4 +1,4 @@
-import { matchEligibleGrants, type ProjectForGrants, type Grant } from './grantMatcher';
+import { matchEligibleGrants, type ProjectForGrants, type Grant } from '../../../src/services/grantMatcher';
 
 describe('Berlin Grant Matching', () => {
     const berlinProject: ProjectForGrants = {
@@ -61,7 +61,7 @@ describe('Grant Amount Calculation', () => {
 
 describe('Helper Functions', () => {
     it('formatGrantsForPDF returns correct strings', () => {
-        const { formatGrantsForPDF } = require('./grantMatcher');
+        const { formatGrantsForPDF } = require('../../../src/services/grantMatcher');
         const grants = [{
             name: 'Test Grant',
             maxFundingPercent: 50,
@@ -74,7 +74,7 @@ describe('Helper Functions', () => {
 
 describe('Granular Region Checks', () => {
     it('handles EU boundary checks', () => {
-        const { matchEligibleGrants } = require('./grantMatcher');
+        const { matchEligibleGrants } = require('../../../src/services/grantMatcher');
         // Spain (39/-4) -> EU but likely not Germany/Berlin specific
         const spainProject: ProjectForGrants = {
             latitude: 40.0, longitude: -3.0, totalCostEUR: 60000,
@@ -88,7 +88,7 @@ describe('Granular Region Checks', () => {
     });
 
     it('checkKfw432 requires rain garden of size 20', () => {
-        const { matchEligibleGrants } = require('./grantMatcher');
+        const { matchEligibleGrants } = require('../../../src/services/grantMatcher');
         const germanyProject: ProjectForGrants = {
             latitude: 50.0, longitude: 10.0, totalCostEUR: 1000,
             fixes: [{ type: 'rain_garden', size: 10 }], areaM2: 100, // < 20

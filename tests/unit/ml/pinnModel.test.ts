@@ -4,9 +4,9 @@ import {
     computeKinematicWaveSolution,
     type PINNInput,
     getHybridPrediction,
-    computeRationalMethod,
     getModel
-} from './pinnModel';
+} from '../../../src/ml/pinnModel';
+import { computePeakRunoff } from '../../../src/utils/hydrology';
 
 // Mock TensorFlow.js for unit tests
 jest.mock('@tensorflow/tfjs', () => ({
@@ -118,7 +118,7 @@ describe('Rational Method', () => {
     it('computes correct runoff', () => {
         // Q = CiA / 3600
         // Q = 0.9 * 100 * 360 / 3600 = 9
-        const q = computeRationalMethod(100, 360, 0.9);
+        const q = computePeakRunoff(360, 100, 0.9);
         expect(q).toBeCloseTo(9.0);
     });
 });
@@ -132,7 +132,7 @@ describe('PINN Initialization & Singleton', () => {
         });
 
         jest.resetModules();
-        const { getModel: getModelLocal } = require('./pinnModel');
+        const { getModel: getModelLocal } = require('../../../src/ml/pinnModel');
 
         const p1 = getModelLocal();
         const p2 = getModelLocal();
@@ -162,7 +162,7 @@ describe('Hybrid Prediction', () => {
 
     it('favors PINN when consistent with rational method', async () => {
         jest.resetModules();
-        const { getHybridPrediction: getHybrid } = require('./pinnModel');
+        const { getHybridPrediction: getHybrid } = require('../../../src/ml/pinnModel');
         const input: PINNInput = { x: 100, t: 30, rainfall: 50, slope: 0.02, manningN: 0.015 };
         const hybrid = await getHybrid(input, 100);
 
@@ -172,7 +172,7 @@ describe('Hybrid Prediction', () => {
 
     it('falls back to rational when PINN fails checks', async () => {
         jest.resetModules();
-        const { getHybridPrediction: getHybrid } = require('./pinnModel');
+        const { getHybridPrediction: getHybrid } = require('../../../src/ml/pinnModel');
         const input: PINNInput = { x: 100, t: 30, rainfall: 50, slope: 0.02, manningN: 0.015 };
         const hybrid = await getHybrid(input, 1000); // Bad ratio
         expect(hybrid.isPINNPrediction).toBe(false);
