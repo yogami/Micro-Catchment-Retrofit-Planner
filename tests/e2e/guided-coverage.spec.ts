@@ -128,6 +128,37 @@ test.describe('Phase 2: Guided Coverage', () => {
     });
 
     // =====================================================
+    // Test 3b: Ground-Truth Origin (0,0) is Inside
+    // =====================================
+    test('treats bottom-center origin as safe starting point', async ({ page }) => {
+        await enterScanner(page);
+
+        // Ensure we are at origin (0,0)
+        await page.evaluate(() => {
+            window.dispatchEvent(new CustomEvent('mock-camera-position', {
+                detail: { x: 0, y: 0 }
+            }));
+        });
+
+        // Set boundary by tapping 4 points on screen
+        // In our new centered mapping:
+        // (W/2, H) is 0,0 (bottom center)
+        // (W/2 - 100, H - 200) is roughly (-1m, 2m)
+        const marker = page.getByTestId('boundary-marker');
+
+        // Tap corners to SURROUND the bottom-center (0,0)
+        // Note: Playwright clicks are absolute pixels.
+        // Viewport: 390x844. Bottom center: 195, 844
+        await marker.click({ position: { x: 50, y: 400 }, force: true });  // Top Left
+        await marker.click({ position: { x: 340, y: 400 }, force: true }); // Top Right
+        await marker.click({ position: { x: 340, y: 800 }, force: true }); // Bottom Right
+        await marker.click({ position: { x: 50, y: 800 }, force: true });  // Bottom Left
+
+        // Assert: Standing at 0,0 should NOT trigger the warning
+        await expect(page.getByTestId('out-of-bounds-alert')).not.toBeAttached();
+    });
+
+    // =====================================================
     // Test 4: Coverage Accumulation
     // =====================================================
     test('accumulates voxels when sampling inside boundary', async ({ page }) => {

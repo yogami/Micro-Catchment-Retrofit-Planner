@@ -16,7 +16,8 @@
     "test:coverage": "jest --coverage",
     "test:e2e": "playwright test",
     "test:e2e:mobile": "playwright test --project=mobile",
-    "test:acceptance": "cucumber-js tests/acceptance/*.feature --require tests/step-definitions/*.ts"
+    "test:acceptance": "cucumber-js tests/acceptance/*.feature --require tests/step-definitions/*.ts",
+    "verify": "npm run lint && npm run test && npm run test:e2e && npm run build"
   },
   "dependencies": {
     "@google/model-viewer": "^4.1.0",

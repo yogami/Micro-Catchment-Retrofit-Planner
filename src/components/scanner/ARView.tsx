@@ -149,6 +149,7 @@ function GuidedSection({ scanner, coverage, pos }: {
 }) {
     return (
         <GuidedCoverageOverlay
+            isDetecting={scanner.isDetecting}
             voxels={coverage.voxels}
             coveragePercent={coverage.stats?.coveragePercent ?? null}
             cameraPosition={pos}

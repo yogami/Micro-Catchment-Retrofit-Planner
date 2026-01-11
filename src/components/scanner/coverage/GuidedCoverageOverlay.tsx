@@ -17,6 +17,7 @@ interface GuidedCoverageOverlayProps {
     voxels: Voxel[];
     coveragePercent: number | null;
     cameraPosition: Point;
+    isDetecting: boolean;
     onComplete: () => void;
     onBoundarySet: (points: Point[]) => void;
     size?: number;
@@ -30,6 +31,7 @@ export function GuidedCoverageOverlay({
     voxels,
     coveragePercent,
     cameraPosition,
+    isDetecting,
     onComplete,
     onBoundarySet,
     size = 200
@@ -49,6 +51,9 @@ export function GuidedCoverageOverlay({
 
     const isComplete = useCoverageAutoCompletion(coveragePercent, onComplete);
     const isOutOfBounds = useCameraContainment(boundary, cameraPosition, audioRef, viewport);
+
+    const showRedAlert = isOutOfBounds && isDetecting;
+    const showYellowHint = isOutOfBounds && !isDetecting && !isMarking && boundary !== null;
 
     useInitialBoundaryEffect(boundary, isMarking, startMarking);
 
@@ -71,12 +76,13 @@ export function GuidedCoverageOverlay({
                 voxels={voxels}
                 percent={coveragePercent}
                 pos={cameraPosition}
-                out={isOutOfBounds}
+                out={showRedAlert}
                 size={size}
                 boundary={scaledBoundary}
                 isMarking={isMarking}
             />
             <BoundaryLayer boundary={boundary} hide={isMarking} />
+            <AlertOverlay showRed={showRedAlert} showYellow={showYellowHint} />
             <audio ref={audioRef} src="/sounds/alert.mp3" preload="auto" hidden aria-hidden="true" />
         </div>
     );
@@ -103,9 +109,14 @@ function MapOverlay({ voxels, percent, pos, out, size, boundary, isMarking }: an
                 size={size}
                 boundary={boundary}
             />
-            {out && <OutOfBoundsAlert />}
         </div>
     );
+}
+
+function AlertOverlay({ showRed, showYellow }: { showRed: boolean; showYellow: boolean }) {
+    if (showRed) return <OutOfBoundsAlert isStrict />;
+    if (showYellow) return <OutOfBoundsAlert />;
+    return null;
 }
 
 function BoundaryLayer({ boundary, hide }: { boundary: Point[] | null; hide: boolean }) {

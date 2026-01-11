@@ -9,10 +9,13 @@ export function MapHeader({ percent }: { percent: number | null }) {
     );
 }
 
-export function OutOfBoundsAlert() {
+export function OutOfBoundsAlert({ isStrict = false }: { isStrict?: boolean }) {
+    const bg = isStrict ? 'bg-red-500/20 border-red-500 text-red-400' : 'bg-yellow-500/20 border-yellow-500 text-yellow-400';
+    const label = isStrict ? '⚠️ Move back inside plot!' : 'ℹ️ Enter plot area to start';
+
     return (
-        <div className="mt-2 px-3 py-2 bg-red-500/20 border border-red-500 rounded-lg text-red-400 text-xs font-bold text-center animate-pulse" data-testid="out-of-bounds-alert">
-            ⚠️ Move back inside plot!
+        <div className={`mt-2 px-3 py-2 border rounded-lg text-xs font-bold text-center animate-pulse ${bg}`} data-testid="out-of-bounds-alert">
+            {label}
         </div>
     );
 }
