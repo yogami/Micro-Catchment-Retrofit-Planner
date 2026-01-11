@@ -52,8 +52,8 @@ export function GuidedCoverageOverlay({
     const isComplete = useCoverageAutoCompletion(coveragePercent, onComplete);
     const isOutOfBounds = useCameraContainment(boundary, cameraPosition, audioRef, viewport);
 
+    // Red alert only triggers during active sampling
     const showRedAlert = isOutOfBounds && isDetecting;
-    const showYellowHint = isOutOfBounds && !isDetecting && !isMarking && boundary !== null;
 
     useInitialBoundaryEffect(boundary, isMarking, startMarking);
 
@@ -82,7 +82,7 @@ export function GuidedCoverageOverlay({
                 isMarking={isMarking}
             />
             <BoundaryLayer boundary={boundary} hide={isMarking} />
-            <AlertOverlay showRed={showRedAlert} showYellow={showYellowHint} />
+            {showRedAlert && <AlertBox />}
             <audio ref={audioRef} src="/sounds/alert.mp3" preload="auto" hidden aria-hidden="true" />
         </div>
     );
@@ -113,10 +113,8 @@ function MapOverlay({ voxels, percent, pos, out, size, boundary, isMarking }: an
     );
 }
 
-function AlertOverlay({ showRed, showYellow }: { showRed: boolean; showYellow: boolean }) {
-    if (showRed) return <OutOfBoundsAlert isStrict />;
-    if (showYellow) return <OutOfBoundsAlert />;
-    return null;
+function AlertBox() {
+    return <OutOfBoundsAlert isStrict />;
 }
 
 function BoundaryLayer({ boundary, hide }: { boundary: Point[] | null; hide: boolean }) {
