@@ -1,5 +1,31 @@
 import { describe, it, expect } from '@jest/globals';
-import { BoundsCalculator, MapViewport } from '../../../../src/components/scanner/coverage/ui/MapViewport';
+import { BoundsCalculator, MapViewport, ScreenToWorld } from '../../../../src/components/scanner/coverage/ui/MapViewport';
+
+describe('ScreenToWorld', () => {
+    it('maps bottom-center of screen to world origin (0,0)', () => {
+        const width = 400;
+        const height = 800;
+        const screenPoint = { x: 200, y: 800 }; // Bottom center
+
+        const worldPoint = ScreenToWorld.map(screenPoint, width, height);
+
+        expect(worldPoint.x).toBe(0);
+        expect(worldPoint.y).toBe(0);
+    });
+
+    it('maps top-right of screen to expected world meters', () => {
+        const width = 400;
+        const height = 800;
+        const screenPoint = { x: 400, y: 0 }; // Top right
+
+        const worldPoint = ScreenToWorld.map(screenPoint, width, height);
+
+        // (400 - 200) * 0.01 = 2
+        expect(worldPoint.x).toBe(2);
+        // (800 - 0) * 0.01 = 8
+        expect(worldPoint.y).toBe(8);
+    });
+});
 
 describe('BoundsCalculator', () => {
     it('calculates bounds centered on camera when no voxels exist', () => {
