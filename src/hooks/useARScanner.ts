@@ -24,6 +24,9 @@ import { useScannerHydrology } from './scanner/useScannerHydrology';
 import { useScannerCompliance } from './scanner/useScannerCompliance';
 import { useScannerVoxelMapping } from './scanner/useScannerVoxelMapping';
 import { type DepthMode } from '../lib/depth-sensing';
+import { type GeoPolygon } from '../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
+
+export type ScanPhase = 'onboarding' | 'planning' | 'scanning';
 
 export interface ARScannerState {
     isScanning: boolean;
@@ -59,6 +62,9 @@ export interface ARScannerState {
     // Depth Sensing State
     depthMode: DepthMode;
     accuracyLabel: string;
+    // Map-Guided AR Phase State
+    scanPhase: ScanPhase;
+    geoBoundary: GeoPolygon | null;
 }
 
 export interface Services {
@@ -89,7 +95,8 @@ export function useARScanner() {
         jurisdictionChain: null, discoveryResult: null, pollutantResult: null,
         complianceResults: [], isGeneratingPDF: false, peakRunoff: 0, wqv: 0, isPinnActive: false,
         optimizationResult: null, tapeValidation: null, validationError: null,
-        depthMode: 'initializing', accuracyLabel: 'Initializing...'
+        depthMode: 'initializing', accuracyLabel: 'Initializing...',
+        scanPhase: 'onboarding', geoBoundary: null
     });
 
     const update = useCallback((u: Partial<ARScannerState>) => setState(s => ({ ...s, ...u })), []);

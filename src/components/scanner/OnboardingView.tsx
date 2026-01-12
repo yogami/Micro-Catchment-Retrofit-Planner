@@ -11,10 +11,10 @@ export function OnboardingView({ scanner }: { scanner: ReturnType<typeof useARSc
             <h2 className="text-2xl font-bold mb-2 text-white">Ready to Scan</h2>
             <p className="text-gray-400 mb-8 max-w-xs text-sm">Point your camera at a street or sidewalk to measure runoff and plan retrofits.</p>
             <button
-                onClick={() => scanner.update({ isScanning: true, detectedArea: null, scanProgress: 0, isLocked: false })}
+                onClick={() => scanner.update({ scanPhase: 'planning', detectedArea: null, scanProgress: 0, isLocked: false })}
                 className="px-8 py-4 rounded-2xl bg-gradient-to-r from-red-500 to-orange-500 font-semibold shadow-lg hover:scale-105 active:scale-95 transition-all text-white"
             >
-                📷 Start AR Scan
+                🗺️ Define Scan Area
             </button>
         </div>
     );

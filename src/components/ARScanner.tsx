@@ -5,7 +5,9 @@ import { ScannerHeader } from './scanner/ScannerHeader';
 import { OnboardingView } from './scanner/OnboardingView';
 import { ARView } from './scanner/ARView';
 import { AnalysisPanel } from './scanner/AnalysisPanel';
-import React from 'react';
+import { MapBoundaryView } from './scanner/map/MapBoundaryView';
+import { type GeoPolygon } from '../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
+import React, { useCallback } from 'react';
 
 type ScannerHook = ReturnType<typeof useARScanner>;
 
@@ -34,8 +36,38 @@ function ScannerMain({ scanner }: { scanner: ScannerHook }) {
 }
 
 function ScannerBody({ scanner }: { scanner: ScannerHook }) {
-    if (!scanner.isScanning) return <MemoOnboardingView scanner={scanner} />;
-    return <ScanningInterface scanner={scanner} />;
+    const handleBoundaryConfirmed = useCallback((polygon: GeoPolygon) => {
+        scanner.update({
+            geoBoundary: polygon,
+            scanPhase: 'scanning',
+            isScanning: true
+        });
+    }, [scanner]);
+
+    const handleCancelPlanning = useCallback(() => {
+        scanner.update({ scanPhase: 'onboarding' });
+    }, [scanner]);
+
+    // Phase-based rendering
+    switch (scanner.scanPhase) {
+        case 'onboarding':
+            return <MemoOnboardingView scanner={scanner} />;
+        case 'planning':
+            return (
+                <div className="h-[calc(100vh-8rem)]">
+                    <MapBoundaryView
+                        onBoundaryConfirmed={handleBoundaryConfirmed}
+                        onCancel={handleCancelPlanning}
+                        minVertices={4}
+                        maxVertices={8}
+                    />
+                </div>
+            );
+        case 'scanning':
+            return <ScanningInterface scanner={scanner} />;
+        default:
+            return <MemoOnboardingView scanner={scanner} />;
+    }
 }
 
 function ScanningInterface({ scanner }: { scanner: ScannerHook }) {
