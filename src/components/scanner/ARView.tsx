@@ -7,9 +7,10 @@ import { GuidedCoverageOverlay } from './coverage/GuidedCoverageOverlay';
 import type { Point } from '../../lib/spatial-coverage';
 import { useSpatialCoverage } from '../../hooks/useSpatialCoverage';
 import { useDeviceOrientation } from '../../hooks/useDeviceOrientation';
-import { ResultHeader, ResultFooter } from './ui/ResultDisplay';
+import { ResultHeader, ResultFooter, ExportActionGroup } from './ui/ResultDisplay';
 import { OptimizationActions, ValidationSection } from './ui/ScannerActions';
 import { ScannerControls, ProgressBar } from './ui/ScannerControls';
+import { TapeCalibration } from './validation/TapeCalibration';
 
 type ScannerHook = ReturnType<typeof useARScanner>;
 
@@ -161,6 +162,7 @@ function GuidedSection({ scanner, coverage, pos }: {
             cameraPosition={pos}
             onComplete={() => scanner.update({ isLocked: true })}
             onBoundarySet={(p: Point[]) => coverage.setBoundary(p)}
+            onElevationUpdate={(grid) => scanner.update({ elevationGrid: grid })}
             presetBoundary={presetBoundary}
         />
     );
@@ -225,18 +227,30 @@ function AreaBadge({ area, system }: { area: number; system: 'metric' | 'imperia
 
 
 function LockedResultCard({ scanner }: { scanner: ScannerHook }) {
+    const [showCalibration, setShowCalibration] = useState(false);
     const area = Math.round(convertArea(scanner.detectedArea || 0, scanner.unitSystem));
     const unit = getAreaUnit(scanner.unitSystem);
 
     return (
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(16,185,129,0.1)_100%)] pointer-events-auto z-50">
+            {showCalibration && (
+                <TapeCalibration
+                    calculatedDistance={10.0} // Mocked for now, should come from boundary measurement
+                    onCalibrate={(factor) => {
+                        scanner.handleValidateTape((scanner.detectedArea || 0) * factor);
+                        setShowCalibration(false);
+                    }}
+                    onCancel={() => setShowCalibration(false)}
+                />
+            )}
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[95%] animate-in slide-in-from-bottom-10 flex flex-col gap-3">
                 <SurveyGradeRibbon />
                 <div className="bg-gray-900/95 backdrop-blur-2xl border border-emerald-500/50 rounded-b-2xl p-5 shadow-2xl text-left">
                     <ResultSummary scanner={scanner} area={area} unit={unit} />
                     <OptimizationActions scanner={scanner} />
                     <GenerationProgress scanner={scanner} />
-                    <ValidationSection scanner={scanner} unit={unit} />
+                    <ValidationSection scanner={scanner} unit={unit} onOpenCalibration={() => setShowCalibration(true)} />
+                    <ExportActionGroup scanner={scanner} />
                     <ResultFooter update={scanner.update} isPinn={scanner.isPinnActive} />
                 </div>
             </div>

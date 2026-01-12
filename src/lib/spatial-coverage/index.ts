@@ -43,6 +43,8 @@ export {
     type GridBounds,
     type SlopeVector
 } from './domain/valueObjects/ElevationGrid';
+export { GeoPolygon } from './domain/valueObjects/GeoPolygon';
+export { CoordinateTransform, type LatLon } from './domain/services/CoordinateTransform';
 
 // Domain - Entities
 export {

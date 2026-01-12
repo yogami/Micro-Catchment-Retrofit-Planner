@@ -38,64 +38,37 @@ function simulateCADGeneration(scanner: ScannerHook) {
     }, 500);
 }
 
-export function ValidationSection({ scanner, unit }: { scanner: ScannerHook; unit: string }) {
+import { ValidationBadge } from '../validation/ValidationBadge';
+
+export function ValidationSection({
+    scanner,
+    onOpenCalibration
+}: {
+    scanner: ScannerHook;
+    unit: string;
+    onOpenCalibration: () => void;
+}) {
+    const status = (scanner.validationError !== null && scanner.validationError < 0.5) ? 'pass' :
+        (scanner.tapeValidation === null ? 'warning' : 'fail');
+
     return (
         <div className="bg-black/40 rounded-xl p-3 mb-4 border border-white/5">
-            <ValidationHeader error={scanner.validationError} />
-            <ValidationInputGroup scanner={scanner} unit={unit} />
-        </div>
-    );
-}
+            <div className="flex justify-between items-center mb-3">
+                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Field Validation</span>
+                <button
+                    onClick={onOpenCalibration}
+                    className="text-[9px] font-black px-2 py-1 bg-gray-800 border border-white/10 rounded-md text-emerald-400 hover:bg-gray-700 transition-colors uppercase"
+                >
+                    📏 Calibrate
+                </button>
+            </div>
 
-function ValidationHeader({ error }: { error: number | null }) {
-    return (
-        <div className="flex justify-between items-center mb-2">
-            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Tape Measure Validation</span>
-            <ValidationErrorBadge error={error} />
-        </div>
-    );
-}
-
-function ValidationErrorBadge({ error }: { error: number | null }) {
-    if (error === null) return null;
-    const cls = getBadgeCls(error >= 0.5);
-    const label = getBadgeLabel(error < 0.3);
-
-    return (
-        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${cls}`}>
-            {label}
-        </span>
-    );
-}
-
-function getBadgeCls(isOutOfSpec: boolean) {
-    return isOutOfSpec ? 'bg-yellow-500/20 text-yellow-500' : 'bg-emerald-500/20 text-emerald-400';
-}
-
-function getBadgeLabel(isSurveyGrade: boolean) {
-    return isSurveyGrade ? '✅ SURVEY-GRADE' : '⚠️ OUT OF SPEC';
-}
-
-function ValidationInputGroup({ scanner, unit }: { scanner: ScannerHook; unit: string }) {
-    return (
-        <div className="flex gap-2">
-            <input
-                type="number"
-                placeholder={`Enter tape ${unit}...`}
-                className="flex-1 bg-gray-800 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                onChange={(e) => scanner.handleValidateTape(parseFloat(e.target.value) || 0)}
+            <ValidationBadge
+                status={status === 'fail' ? 'fail' : (scanner.tapeValidation ? 'pass' : 'warning')}
+                coveragePercent={97.5} // Mocked
+                accuracy={scanner.validationError || undefined}
             />
-            <ErrorDisplay error={scanner.validationError} />
         </div>
     );
 }
 
-function ErrorDisplay({ error }: { error: number | null }) {
-    if (error === null) return null;
-    return (
-        <div className="bg-gray-800 border border-white/10 rounded-lg px-3 py-1.5 flex flex-col justify-center">
-            <span className="text-[8px] text-gray-400 font-bold uppercase">Error</span>
-            <span data-testid="validation-error-value" className="text-xs font-mono font-black text-white">{error}%</span>
-        </div>
-    );
-}

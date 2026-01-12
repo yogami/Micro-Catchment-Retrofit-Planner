@@ -10,12 +10,20 @@ export function OnboardingView({ scanner }: { scanner: ReturnType<typeof useARSc
             <StatusIcon isLoading={scanner.isLoadingRainfall} location={scanner.locationName} val={rainfallVal} unit={rainfallUnit} />
             <h2 className="text-2xl font-bold mb-2 text-white">Ready to Scan</h2>
             <p className="text-gray-400 mb-8 max-w-xs text-sm">Point your camera at a street or sidewalk to measure runoff and plan retrofits.</p>
-            <button
-                onClick={() => scanner.update({ scanPhase: 'planning', detectedArea: null, scanProgress: 0, isLocked: false })}
-                className="px-8 py-4 rounded-2xl bg-gradient-to-r from-red-500 to-orange-500 font-semibold shadow-lg hover:scale-105 active:scale-95 transition-all text-white"
-            >
-                🗺️ Define Scan Area
-            </button>
+            <div className="flex flex-col gap-3 w-full max-w-xs">
+                <button
+                    onClick={() => scanner.update({ scanPhase: 'planning', detectedArea: null, scanProgress: 0, isLocked: false })}
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-red-500 to-orange-500 font-semibold shadow-lg hover:scale-105 active:scale-95 transition-all text-white"
+                >
+                    🗺️ Define Scan Area
+                </button>
+                <button
+                    onClick={() => scanner.update({ scanPhase: 'drone_upload' })}
+                    className="w-full py-4 rounded-2xl bg-gray-800 border border-white/10 font-semibold shadow-lg hover:bg-gray-700 active:scale-95 transition-all text-white"
+                >
+                    🚁 Upload Drone Media
+                </button>
+            </div>
         </div>
     );
 }

@@ -6,6 +6,7 @@ import { OnboardingView } from './scanner/OnboardingView';
 import { ARView } from './scanner/ARView';
 import { AnalysisPanel } from './scanner/AnalysisPanel';
 import { MapBoundaryView } from './scanner/map/MapBoundaryView';
+import { DroneUploadView } from './scanner/drone/DroneUploadView';
 import { type GeoPolygon } from '../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
 import React, { useCallback } from 'react';
 
@@ -65,6 +66,8 @@ function ScannerBody({ scanner }: { scanner: ScannerHook }) {
             );
         case 'scanning':
             return <ScanningInterface scanner={scanner} />;
+        case 'drone_upload':
+            return <DroneUploadView scanner={scanner} />;
         default:
             return <MemoOnboardingView scanner={scanner} />;
     }
