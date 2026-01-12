@@ -147,6 +147,12 @@ function GuidedSection({ scanner, coverage, pos }: {
     coverage: ReturnType<typeof useSpatialCoverage>;
     pos: { x: number; y: number };
 }) {
+    // Convert GeoPolygon to local meters if available
+    const presetBoundary = useMemo(() => {
+        if (!scanner.geoBoundary || !scanner.location) return null;
+        return scanner.geoBoundary.toLocalMeters(scanner.location);
+    }, [scanner.geoBoundary, scanner.location]);
+
     return (
         <GuidedCoverageOverlay
             isDetecting={scanner.isDetecting}
@@ -155,6 +161,7 @@ function GuidedSection({ scanner, coverage, pos }: {
             cameraPosition={pos}
             onComplete={() => scanner.update({ isLocked: true })}
             onBoundarySet={(p: Point[]) => coverage.setBoundary(p)}
+            presetBoundary={presetBoundary}
         />
     );
 }

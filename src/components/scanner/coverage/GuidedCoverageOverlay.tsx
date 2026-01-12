@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import type { Voxel, Point } from '../../../lib/spatial-coverage';
 import { BoundaryMarker } from './BoundaryMarker';
 import { useBoundaryMarker } from '../../../hooks/useBoundaryMarker';
@@ -21,6 +21,8 @@ interface GuidedCoverageOverlayProps {
     onComplete: () => void;
     onBoundarySet: (points: Point[]) => void;
     size?: number;
+    /** Pre-defined boundary from map (already in local meters) */
+    presetBoundary?: Point[] | null;
 }
 
 /**
@@ -34,7 +36,8 @@ export function GuidedCoverageOverlay({
     isDetecting,
     onComplete,
     onBoundarySet,
-    size = 200
+    size = 200,
+    presetBoundary = null
 }: GuidedCoverageOverlayProps) {
     const { boundary, isMarking, startMarking, completeBoundary } = useBoundaryMarker();
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -49,13 +52,25 @@ export function GuidedCoverageOverlay({
         }
     }, [isMarking]);
 
+    // Use presetBoundary if available, otherwise use the tap-based boundary
+    const effectiveBoundary = presetBoundary ?? boundary;
+    const hasPreset = presetBoundary !== null && presetBoundary.length >= 3;
+
     const isComplete = useCoverageAutoCompletion(coveragePercent, onComplete);
-    const isOutOfBounds = useCameraContainment(boundary, cameraPosition, audioRef, viewport);
+    const isOutOfBounds = useCameraContainment(effectiveBoundary, cameraPosition, audioRef, viewport);
 
     // Red alert only triggers during active sampling
     const showRedAlert = isOutOfBounds && isDetecting;
 
-    useInitialBoundaryEffect(boundary, isMarking, startMarking);
+    // Skip tap-based marking if we have a preset boundary
+    useInitialBoundaryEffect(boundary, isMarking && !hasPreset, startMarking);
+
+    // Auto-set boundary from preset on first render
+    useEffect(() => {
+        if (hasPreset && !boundary) {
+            onBoundarySet(presetBoundary!);
+        }
+    }, [hasPreset, boundary, presetBoundary, onBoundarySet]);
 
     const handleBoundaryComplete = useCallback((points: Point[]) => {
         completeBoundary(points);
@@ -63,25 +78,26 @@ export function GuidedCoverageOverlay({
         onBoundarySet(points.map(p => ScreenToWorld.map(p, viewport.width, viewport.height)));
     }, [completeBoundary, onBoundarySet, viewport]);
 
-    const scaledBoundary = useMemo(() =>
-        boundary?.map(p => ScreenToWorld.map(p, viewport.width, viewport.height)) ?? null,
-        [boundary, viewport]);
+    // For display: use preset directly (already in meters) or convert tap-based
+    const displayBoundary = hasPreset
+        ? presetBoundary
+        : boundary?.map(p => ScreenToWorld.map(p, viewport.width, viewport.height)) ?? null;
 
     if (isComplete) return <CompleteOverlay />;
 
     return (
         <div ref={overlayRef} className="absolute inset-0 z-50 pointer-events-none" data-testid="guided-coverage-overlay">
-            <MarkingLayer show={isMarking} onComplete={handleBoundaryComplete} />
+            <MarkingLayer show={isMarking && !hasPreset} onComplete={handleBoundaryComplete} />
             <MapOverlay
                 voxels={voxels}
                 percent={coveragePercent}
                 pos={cameraPosition}
                 out={showRedAlert}
                 size={size}
-                boundary={scaledBoundary}
-                isMarking={isMarking}
+                boundary={displayBoundary}
+                isMarking={isMarking && !hasPreset}
             />
-            <BoundaryLayer boundary={boundary} hide={isMarking} />
+            <BoundaryLayer boundary={hasPreset ? null : boundary} hide={isMarking} />
             {showRedAlert && <AlertBox />}
             <audio ref={audioRef} src="/sounds/alert.mp3" preload="auto" hidden aria-hidden="true" />
         </div>
