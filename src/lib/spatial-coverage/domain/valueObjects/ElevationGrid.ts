@@ -139,7 +139,9 @@ export class ElevationGrid {
 
         for (const s of this.samples) {
             const dist = Math.sqrt((s.x - x) ** 2 + (s.y - y) ** 2);
-            const weight = 1 / Math.pow(dist + EPSILON, IDW_POWER);
+            // Weight = 1 / (dist^p * accuracy^2)
+            // Accuracy weighting ensures high-precision sensors (LiDAR) dominate
+            const weight = 1 / (Math.pow(dist + EPSILON, IDW_POWER) * Math.pow(s.accuracy, 2));
             weightSum += weight;
             valueSum += weight * s.elevation;
         }

@@ -8,6 +8,7 @@ import {
 } from './hooks/useCoverageManagement';
 import { MapHeader, OutOfBoundsAlert } from './ui/StatusOverlays';
 import { useElevationCapture } from '../../../hooks/scanner/useElevationCapture';
+import { useLidarSimulator } from '../../../hooks/scanner/useLidarSimulator';
 
 interface GuidedCoverageOverlayProps {
     voxels: Voxel[];
@@ -42,6 +43,10 @@ export function GuidedCoverageOverlay({
 
     // Capture elevation during active scanning
     const elevation = useElevationCapture(cameraPosition, isDetecting);
+
+    // LiDAR Simulator - Active in development mode to validate high-precision fusion
+    const isDev = process.env.NODE_ENV === 'development';
+    useLidarSimulator(elevation.grid, cameraPosition, isDetecting && isDev);
 
     // Report elevation grid updates to parent
     useEffect(() => {

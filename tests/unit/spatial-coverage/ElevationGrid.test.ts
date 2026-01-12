@@ -83,6 +83,23 @@ describe('ElevationGrid', () => {
             const center = grid.interpolate(0.5, 0.5);
             expect(center).toBeCloseTo(0.05, 1);
         });
+
+        it('prioritizes high-precision LiDAR over noisy GPS readings', () => {
+            // Noisy GPS reading at (2, 2)
+            grid.addSample(createElevationSample({
+                x: 2, y: 2, elevation: 10.0, accuracy: 5.0, source: 'gps'
+            }));
+
+            // Precise LiDAR reading at (2.1, 2.1) - very close by
+            grid.addSample(createElevationSample({
+                x: 2.1, y: 2.1, elevation: 5.0, accuracy: 0.01, source: 'lidar'
+            }));
+
+            // Interpolation at (2.05, 2.05) should be much closer to 5.0 than 10.0
+            const result = grid.interpolate(2.05, 2.05);
+            expect(result).toBeLessThan(6.0);
+            expect(result).toBeGreaterThan(4.0);
+        });
     });
 
     describe('getSlope', () => {
