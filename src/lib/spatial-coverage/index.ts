@@ -32,6 +32,17 @@ export {
     type CoverageStats,
     createCoverageStats
 } from './domain/valueObjects/CoverageStats';
+export {
+    type ElevationSample,
+    type ElevationSource,
+    type ElevationSampleInput,
+    createElevationSample
+} from './domain/valueObjects/ElevationSample';
+export {
+    ElevationGrid,
+    type GridBounds,
+    type SlopeVector
+} from './domain/valueObjects/ElevationGrid';
 
 // Domain - Entities
 export {

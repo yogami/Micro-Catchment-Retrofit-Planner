@@ -4,7 +4,7 @@ import { convertArea, getAreaUnit, convertFlow, getFlowUnit, convertVolume, getV
 import { useCoverageMode } from '../../contexts/FeatureFlagContext';
 import { CoverageHeatmap } from './coverage/CoverageHeatmap';
 import { GuidedCoverageOverlay } from './coverage/GuidedCoverageOverlay';
-import type { Point } from './coverage/BoundaryMarker';
+import type { Point } from '../../lib/spatial-coverage';
 import { useSpatialCoverage } from '../../hooks/useSpatialCoverage';
 import { useDeviceOrientation } from '../../hooks/useDeviceOrientation';
 import { ResultHeader, ResultFooter } from './ui/ResultDisplay';
