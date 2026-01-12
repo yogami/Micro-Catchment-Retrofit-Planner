@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import type { Voxel, Point } from '../../../lib/spatial-coverage';
+import type { Voxel, Point, ElevationGrid } from '../../../lib/spatial-coverage';
 import { CoverageMap } from './ui/CoverageMap';
 import { CompleteOverlay } from './ui/Overlays';
 import {
@@ -7,6 +7,7 @@ import {
     useCameraContainment
 } from './hooks/useCoverageManagement';
 import { MapHeader, OutOfBoundsAlert } from './ui/StatusOverlays';
+import { useElevationCapture } from '../../../hooks/scanner/useElevationCapture';
 
 interface GuidedCoverageOverlayProps {
     voxels: Voxel[];
@@ -15,6 +16,7 @@ interface GuidedCoverageOverlayProps {
     isDetecting: boolean;
     onComplete: () => void;
     onBoundarySet: (points: Point[]) => void;
+    onElevationUpdate?: (grid: ElevationGrid) => void;
     size?: number;
     /** Pre-defined boundary from map (already in local meters) */
     presetBoundary?: Point[] | null;
@@ -31,18 +33,22 @@ export function GuidedCoverageOverlay({
     isDetecting,
     onComplete,
     onBoundarySet,
+    onElevationUpdate,
     size = 200,
     presetBoundary = null
 }: GuidedCoverageOverlayProps) {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const overlayRef = useRef<HTMLDivElement>(null);
 
-    // Track viewport size (still useful for future projections)
+    // Capture elevation during active scanning
+    const elevation = useElevationCapture(cameraPosition, isDetecting);
+
+    // Report elevation grid updates to parent
     useEffect(() => {
-        if (overlayRef.current) {
-            overlayRef.current.getBoundingClientRect();
+        if (onElevationUpdate && elevation.grid.sampleCount > 0) {
+            onElevationUpdate(elevation.grid);
         }
-    }, []);
+    }, [elevation.grid.sampleCount, elevation.grid, onElevationUpdate]);
 
     const effectiveBoundary = presetBoundary ?? [];
     const hasPreset = presetBoundary !== null && presetBoundary.length >= 3;
@@ -71,6 +77,7 @@ export function GuidedCoverageOverlay({
                 out={showRedAlert}
                 size={size}
                 boundary={presetBoundary}
+                elevationRange={getElevationRange(elevation.grid)}
             />
             {showRedAlert && <OutOfBoundsAlert isStrict />}
             <audio ref={audioRef} src="/sounds/alert.mp3" preload="auto" hidden aria-hidden="true" />
@@ -78,7 +85,13 @@ export function GuidedCoverageOverlay({
     );
 }
 
-function MapOverlay({ voxels, percent, pos, out, size, boundary }: any) {
+function getElevationRange(grid: ElevationGrid): { min: number; max: number } | null {
+    const bounds = grid.getBounds();
+    if (!bounds) return null;
+    return { min: bounds.minZ, max: bounds.maxZ };
+}
+
+function MapOverlay({ voxels, percent, pos, out, size, boundary, elevationRange }: any) {
     return (
         <div className="absolute top-4 right-4 bg-gray-900/90 backdrop-blur rounded-xl p-3 border border-white/10 shadow-xl pointer-events-auto">
             <MapHeader percent={percent} />
@@ -89,6 +102,18 @@ function MapOverlay({ voxels, percent, pos, out, size, boundary }: any) {
                 size={size}
                 boundary={boundary}
             />
+            {elevationRange && <ElevationRangeBadge range={elevationRange} />}
+        </div>
+    );
+}
+
+function ElevationRangeBadge({ range }: { range: { min: number; max: number } }) {
+    const delta = range.max - range.min;
+    if (delta < 0.01) return null; // Don't show for flat terrain
+
+    return (
+        <div className="mt-2 text-[9px] text-gray-400 font-mono text-center">
+            Δ Elev: {(delta * 100).toFixed(0)}cm
         </div>
     );
 }
