@@ -45,7 +45,7 @@ test.describe('Map-Guided AR Scan Workflow', () => {
             };
 
             navigator.geolocation.watchPosition = (success: PositionCallback) => {
-                setTimeout(() => success(mockPosition), 100);
+                setTimeout(() => success(mockPosition as any), 100);
                 return 1;
             };
 
@@ -143,7 +143,7 @@ test.describe('Map-Guided AR Scan Workflow', () => {
             };
 
             navigator.geolocation.watchPosition = (success: PositionCallback) => {
-                setTimeout(() => success(moderateAccuracy), 100);
+                setTimeout(() => success(moderateAccuracy as any), 100);
                 return 1;
             };
         });
@@ -248,7 +248,7 @@ test.describe('Workflow Integration', () => {
             };
 
             navigator.geolocation.watchPosition = (success: PositionCallback) => {
-                setTimeout(() => success(mockPosition), 100);
+                setTimeout(() => success(mockPosition as any), 100);
                 return 1;
             };
 
