@@ -73,10 +73,8 @@ function drawVoxels(ctx: CanvasRenderingContext2D, voxels: Voxel[], vp: MapViewp
 }
 
 function drawBoundary(ctx: CanvasRenderingContext2D, boundary: Point[], vp: MapViewport) {
-    if (boundary.length < 2) return;
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
+    if (boundary.length < 3) return;
+
     ctx.beginPath();
     boundary.forEach((p, i) => {
         const screenP = vp.project(p.x, p.y);
@@ -84,8 +82,15 @@ function drawBoundary(ctx: CanvasRenderingContext2D, boundary: Point[], vp: MapV
         else ctx.lineTo(screenP.x, screenP.y);
     });
     ctx.closePath();
+
+    // Fill with translucent green to show scan area
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.15)';
+    ctx.fill();
+
+    // Outline with solid green
+    ctx.strokeStyle = 'rgba(34, 197, 94, 0.6)';
+    ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.setLineDash([]);
 }
 
 function drawCamera(ctx: CanvasRenderingContext2D, cam: Point, vp: MapViewport) {
