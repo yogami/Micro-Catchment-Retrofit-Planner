@@ -189,22 +189,25 @@ function GPSWaitingView({ accuracy, error, onSpoof }: {
     onSpoof: (lat: number, lon: number) => void;
 }) {
     return (
-        <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-white p-6" data-testid="gps-waiting-view">
-            <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-6" />
-            <h2 className="text-xl font-bold mb-2">Acquiring GPS Signal</h2>
-            <p className="text-gray-400 text-sm text-center mb-4">
-                {error ? error : 'Waiting for high-accuracy position...'}
+        <div className="flex flex-col items-center justify-center h-full bg-white text-black p-8 text-center" data-testid="gps-waiting-view">
+            <div className="w-20 h-20 border-8 border-emerald-500 border-t-transparent rounded-full animate-spin mb-8" />
+            <h2 className="text-3xl font-black mb-4 uppercase tracking-tighter">Locating Site...</h2>
+            <p className="text-gray-500 text-lg mb-8 font-medium">
+                {error ? error : 'Wait for accuracy or tap "Force Start" below.'}
             </p>
             {accuracy !== null && (
-                <p className="text-emerald-400 font-mono mb-6">
-                    Current accuracy: ±{accuracy.toFixed(0)}m
-                </p>
+                <div className="bg-emerald-100 px-6 py-3 rounded-2xl mb-12 border-2 border-emerald-500">
+                    <p className="text-emerald-700 font-mono font-bold text-xl">
+                        Signal: ±{accuracy.toFixed(0)}m
+                    </p>
+                </div>
             )}
             <button
-                onClick={() => onSpoof(38.8977, -77.0365)} // Default to White House for demo
-                className="px-4 py-2 border border-white/20 rounded-lg text-xs font-bold text-gray-400 hover:text-white transition-colors"
+                onClick={() => onSpoof(38.8977, -77.0365)}
+                className="w-full py-8 bg-black text-white rounded-3xl font-black text-2xl shadow-2xl active:scale-95 hover:bg-gray-800 transition-all"
             >
-                Bypass GPS for Testing
+                FORCE START ✓
+                <span className="block text-[10px] text-emerald-400 opacity-70 mt-1 uppercase font-black">Bypass GPS for indoor testing</span>
             </button>
         </div>
     );

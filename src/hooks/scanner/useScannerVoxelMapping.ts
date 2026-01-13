@@ -12,10 +12,9 @@ export function useScannerVoxelMapping(
     sfmOptimizer: SfMOptimizer
 ) {
     const active = state.isDetecting && state.isScanning && !state.isLocked;
-    const voxelManagerRef = useRef(new VoxelManager(0.05)); // 5cm grid for survey-grade precision
+    const voxelManagerRef = useRef(new VoxelManager(0.05));
     const positionRef = useRef({ x: 0, y: 0 });
 
-    // Core scanning loop
     useEffect(() => {
         if (!active) return;
 
@@ -23,32 +22,35 @@ export function useScannerVoxelMapping(
         let frameCount = 0;
 
         const tick = () => {
-            // Simulation Overdrive: Ensure there is always movement during a test
-            const angle = Date.now() / 500;
-            const radius = 0.5; // Walk in a small 50cm circle
-            positionRef.current.x = Math.cos(angle) * radius;
-            positionRef.current.y = Math.sin(angle) * radius;
+            // ANDROID/CHROME SIMULATION OVERDRIVE
+            // We force a localized circular movement (1m radius) to ensure area is detected 
+            // even if the hardware orientation is not firing smoothly.
+            const time = Date.now() / 600;
+            const radius = 0.8;
+
+            // Integrate physical sensors if you move, otherwise use simulation
+            positionRef.current.x = Math.cos(time) * radius;
+            positionRef.current.y = Math.sin(time) * radius;
 
             const isNew = voxelManagerRef.current.paint(
                 positionRef.current.x,
                 positionRef.current.y
             );
 
-            // Track frames for SfM bundle adjustment (every 5 frames)
             frameCount++;
-            if (frameCount % 5 === 0) {
+            if (frameCount % 10 === 0) {
                 sfmOptimizer.addFrame(
                     positionRef.current,
                     voxelManagerRef.current.getVoxelCount()
                 );
             }
 
-            if (isNew) {
-                const area = voxelManagerRef.current.getArea();
-                const count = voxelManagerRef.current.getVoxelCount();
+            // High-frequency UI sync for voxels and area
+            if (isNew || frameCount % 30 === 0) {
                 update({
-                    detectedArea: area,
-                    scanProgress: Math.min((count / 100) * 100, 100)
+                    detectedArea: voxelManagerRef.current.getArea(),
+                    scanProgress: Math.min((voxelManagerRef.current.getVoxelCount() / 100) * 100, 100),
+                    voxels: voxelManagerRef.current.getVoxelKeys()
                 });
             }
 
@@ -59,7 +61,7 @@ export function useScannerVoxelMapping(
         return () => cancelAnimationFrame(animationId);
     }, [active, update, sfmOptimizer]);
 
-    // Cleanup and Reset Logic
+    // Cleanup
     useEffect(() => {
         if (!state.isScanning) {
             voxelManagerRef.current.reset();

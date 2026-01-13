@@ -1,27 +1,70 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
-import { useARScanner } from '../../hooks/useARScanner';
-import { convertArea, getAreaUnit, convertFlow, getFlowUnit, convertVolume, getVolumeUnit } from '../../utils/units';
-import { useCoverageMode } from '../../contexts/FeatureFlagContext';
-import { CoverageHeatmap } from './coverage/CoverageHeatmap';
-import { GuidedCoverageOverlay } from './coverage/GuidedCoverageOverlay';
-import type { Point } from '../../lib/spatial-coverage';
-import { useSpatialCoverage } from '../../hooks/useSpatialCoverage';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { useDeviceOrientation } from '../../hooks/useDeviceOrientation';
-import { ResultHeader, ResultFooter, ExportActionGroup } from './ui/ResultDisplay';
-import { OptimizationActions, ValidationSection } from './ui/ScannerActions';
 import { ScannerControls, ProgressBar } from './ui/ScannerControls';
+import { convertArea, getAreaUnit, convertFlow, getFlowUnit, convertVolume, getVolumeUnit } from '../../utils/units';
+import { useARScanner } from '../../hooks/useARScanner';
+import { ValidationSection, OptimizationActions } from './ui/ScannerActions';
 import { TapeCalibration } from './validation/TapeCalibration';
+import { ExportActionGroup, ResultHeader, ResultFooter } from './ui/ResultDisplay';
+import { GuidedCoverageOverlay } from './coverage/GuidedCoverageOverlay';
+import { CoverageHeatmap } from './coverage/CoverageHeatmap';
 
 type ScannerHook = ReturnType<typeof useARScanner>;
+
+function ConditionalWarning({ show }: { show: boolean }) {
+    if (!show) return null;
+    return <PermissionWarning />;
+}
 
 export function ARView({ scanner }: { scanner: ScannerHook }) {
     const videoRef = useRef<HTMLVideoElement>(null);
     useCamera(scanner.isScanning, videoRef, (err) => scanner.update({ cameraError: err }));
 
+    const [permissionWarning, setPermissionWarning] = useState(false);
+    const orientation = useDeviceOrientation();
+    const coverageMode = 'guided'; // Primary mode for Micro-Catchment
+
+    // Map voxel strings from state to Voxel objects for the UI
+    const voxels = useMemo(() => scanner.voxels.map((key: string) => {
+        const [gx, gy] = key.split(',').map(Number);
+        const voxelSize = 0.05; // Matches VoxelManager
+        return {
+            key,
+            worldX: gx * voxelSize,
+            worldY: gy * voxelSize,
+            voxelSize
+        };
+    }), [scanner.voxels]);
+
+    usePermissionEffect(coverageMode, scanner, orientation, setPermissionWarning);
+
+    const mode = resolveMode(coverageMode, orientation.permissionDenied);
+    const cameraPosition = useMemo(() => ({ x: orientation.x, y: orientation.y }), [orientation.x, orientation.y]);
+
+
     return (
         <div className="relative rounded-2xl overflow-hidden bg-black aspect-[9/16] mb-6 shadow-2xl ring-1 ring-white/10">
             <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
-            {scanner.cameraError ? <CameraError error={scanner.cameraError} /> : <ScannerUI scanner={scanner} />}
+            {scanner.cameraError ? <CameraError error={scanner.cameraError} /> : (
+                <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+                        <Reticle active={scanner.isDetecting} locked={scanner.isLocked} />
+                        {!scanner.isLocked && <FloatingStatus scanner={scanner} />}
+                    </div>
+
+                    <SimulationStatus active={scanner.isDetecting} />
+
+                    {scanner.isLocked && <LockedResultCard scanner={scanner} />}
+                    <ScannerControls scanner={scanner} />
+                    <ConditionalWarning show={permissionWarning} />
+                    <CoverageContent
+                        mode={mode}
+                        scanner={scanner}
+                        voxels={voxels}
+                        pos={cameraPosition}
+                    />
+                </div>
+            )}
         </div>
     );
 }
@@ -69,62 +112,9 @@ function CameraError({ error }: { error: string }) {
     );
 }
 
-function ScannerUI({ scanner }: { scanner: ScannerHook }) {
-    const coverageMode = useCoverageMode();
-    const orientation = useDeviceOrientation();
-    const cameraPosition = useMemo(() => ({ x: orientation.x, y: orientation.y }), [orientation.x, orientation.y]);
-
-    const [permissionWarning, setPermissionWarning] = useState(false);
-    const coverage = useSpatialCoverage(undefined, coverageMode === 'guided' ? cameraPosition : undefined);
-
-    useScannerLifecycle(scanner, coverage);
-    usePermissionEffect(coverageMode, scanner, orientation, setPermissionWarning);
-
-    const mode = resolveMode(coverageMode, orientation.permissionDenied);
-
-    return (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                <Reticle active={scanner.isDetecting} locked={scanner.isLocked} />
-                {!scanner.isLocked && <FloatingStatus scanner={scanner} />}
-            </div>
-
-            <SimulationStatus active={scanner.isDetecting} />
-
-            {scanner.isLocked && <LockedResultCard scanner={scanner} />}
-            <ScannerControls scanner={scanner} />
-            <ConditionalWarning show={permissionWarning} />
-            <CoverageContent mode={mode} scanner={scanner} coverage={coverage} pos={cameraPosition} />
-        </div>
-    );
-}
-
 function resolveMode(mode: string, denied: boolean) {
     if (mode === 'guided' && denied) return 'heatmap';
     return mode;
-}
-
-function ConditionalWarning({ show }: { show: boolean }) {
-    if (!show) return null;
-    return <PermissionWarning />;
-}
-
-function useScannerLifecycle(
-    scanner: ScannerHook,
-    coverage: ReturnType<typeof useSpatialCoverage>
-) {
-    useEffect(() => {
-        const active = scanner.isDetecting && scanner.isScanning && !scanner.isLocked;
-        coverage.setActive(active);
-
-        // BRIDGE: Sync area results back to the scanner state
-        if (active && coverage.stats) {
-            scanner.update({
-                detectedArea: coverage.stats.coveredAreaM2,
-                scanProgress: Math.min((coverage.voxels.length / 100) * 100, 100)
-            });
-        }
-    }, [scanner.isDetecting, scanner.isScanning, scanner.isLocked, coverage.stats, coverage.voxels.length]);
 }
 
 function usePermissionEffect(
@@ -152,30 +142,30 @@ function PermissionWarning() {
     );
 }
 
-function CoverageContent({ mode, scanner, coverage, pos }: {
+function CoverageContent({ mode, scanner, voxels, pos }: {
     mode: string;
     scanner: ScannerHook;
-    coverage: ReturnType<typeof useSpatialCoverage>;
+    voxels: any[];
     pos: { x: number; y: number };
 }) {
     if (scanner.isLocked || !scanner.isScanning) return null;
-    return <ActiveCoverageContent mode={mode} scanner={scanner} coverage={coverage} pos={pos} />;
+    return <ActiveCoverageContent mode={mode} scanner={scanner} voxels={voxels} pos={pos} />;
 }
 
-function ActiveCoverageContent({ mode, scanner, coverage, pos }: {
+function ActiveCoverageContent({ mode, scanner, voxels, pos }: {
     mode: string;
     scanner: ScannerHook;
-    coverage: ReturnType<typeof useSpatialCoverage>;
+    voxels: any[];
     pos: { x: number; y: number };
 }) {
-    if (mode === 'guided') return <GuidedSection scanner={scanner} coverage={coverage} pos={pos} />;
-    if (mode === 'heatmap') return <HeatmapSection scanner={scanner} coverage={coverage} />;
+    if (mode === 'guided') return <GuidedSection scanner={scanner} voxels={voxels} pos={pos} />;
+    if (mode === 'heatmap') return <HeatmapSection scanner={scanner} voxels={voxels} />;
     return null;
 }
 
-function GuidedSection({ scanner, coverage, pos }: {
+function GuidedSection({ scanner, voxels, pos }: {
     scanner: ScannerHook;
-    coverage: ReturnType<typeof useSpatialCoverage>;
+    voxels: any[];
     pos: { x: number; y: number };
 }) {
     // Convert GeoPolygon to local meters if available
@@ -187,25 +177,25 @@ function GuidedSection({ scanner, coverage, pos }: {
     return (
         <GuidedCoverageOverlay
             isDetecting={scanner.isDetecting}
-            voxels={coverage.voxels}
-            coveragePercent={coverage.stats?.coveragePercent ?? null}
+            voxels={voxels}
+            coveragePercent={scanner.scanProgress}
             cameraPosition={pos}
             onComplete={() => scanner.update({ isLocked: true })}
-            onBoundarySet={(p: Point[]) => coverage.setBoundary(p)}
+            onBoundarySet={() => { }} // Redundant in unified mode
             onElevationUpdate={(grid) => scanner.update({ elevationGrid: grid })}
             presetBoundary={presetBoundary}
         />
     );
 }
 
-function HeatmapSection({ scanner, coverage }: {
+function HeatmapSection({ scanner, voxels }: {
     scanner: ScannerHook;
-    coverage: ReturnType<typeof useSpatialCoverage>;
+    voxels: any[];
 }) {
     return (
         <CoverageHeatmap
-            voxels={coverage.voxels}
-            coveragePercent={coverage.stats?.coveragePercent ?? null}
+            voxels={voxels}
+            coveragePercent={scanner.scanProgress}
             onFinish={() => scanner.update({ isLocked: true })}
         />
     );
