@@ -46,27 +46,31 @@ export function ARView({ scanner }: { scanner: ScannerHook }) {
     const cameraPosition = useMemo(() => ({ x: orientation.x, y: orientation.y }), [orientation.x, orientation.y]);
 
     return (
-        <div className="fixed inset-0 bg-black z-0 overflow-hidden">
+        <div className="fixed inset-0 bg-transparent z-0 overflow-hidden pointer-events-none">
             <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                className="absolute inset-0 w-full h-full object-cover"
+                className="absolute inset-0 w-full h-full object-cover transform-gpu"
+                style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
             />
 
             {/* BLACK SCREEN FAILSAFE */}
             {!videoPlaying && scanner.isScanning && !scanner.cameraError && (
-                <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/90 p-8 text-center">
-                    <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-6" />
-                    <p className="text-white font-black uppercase tracking-widest text-sm mb-6">Camera Initializing...</p>
+                <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-gray-900 p-8 text-center pointer-events-auto">
+                    <div className="w-16 h-16 border-8 border-emerald-500 border-t-transparent rounded-full animate-spin mb-8" />
+                    <h3 className="text-white text-2xl font-black uppercase mb-2 tracking-tighter">Initializing Optics</h3>
+                    <p className="text-gray-400 text-sm mb-12 font-medium">Android requires a manual tap to activate high-performance video streams.</p>
+
                     <button
                         onClick={handleKickstart}
-                        className="pointer-events-auto bg-emerald-500 text-black px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs animate-bounce"
+                        className="w-full max-w-xs bg-emerald-500 text-black py-8 rounded-3xl font-black uppercase tracking-widest text-lg shadow-[0_20px_50px_rgba(16,185,129,0.4)] active:scale-95 transition-all outline-none"
                     >
-                        Tap to Start Camera Feed
+                        TAP TO START CAMERA
                     </button>
-                    <p className="mt-4 text-[9px] text-gray-500 px-12">Android Chrome sometimes blocks video auto-play. Tap the green button to start.</p>
+
+                    <p className="mt-8 text-[10px] text-gray-500 uppercase font-bold tracking-widest opacity-50">Chrome Security Bypass Active</p>
                 </div>
             )}
 
@@ -211,9 +215,9 @@ function FloatingStatus({ scanner }: { scanner: ScannerHook }) {
 function ScanIndicator({ detecting }: { detecting: boolean }) {
     const label = detecting ? 'Analyzing Surface...' : 'Identify Impervious Area';
     return (
-        <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex flex-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${detecting ? 'bg-emerald-400 animate-pulse' : 'bg-white'}`} />
-            <p className="text-[10px] font-black tracking-widest text-white uppercase">{label}</p>
+        <div className="bg-black/80 backdrop-blur-md px-6 py-3 rounded-full border border-white/20 flex items-center justify-center gap-3">
+            <div className={`w-3 h-3 rounded-full ${detecting ? 'bg-emerald-400 animate-pulse' : 'bg-white'}`} />
+            <p className="text-[11px] font-black tracking-widest text-white uppercase">{label}</p>
         </div>
     );
 }
