@@ -33,17 +33,14 @@ function DetectionProgress({ active, progress }: { active: boolean; progress: nu
 }
 
 function SamplingButton({ detecting, update }: { detecting: boolean; update: UpdateFn }) {
-    const cls = detecting ? 'bg-emerald-500 text-white' : 'bg-white text-gray-900';
+    const cls = detecting ? 'bg-emerald-500 text-white shadow-[0_0_30px_rgba(16,185,129,0.5)]' : 'bg-white text-gray-900 shadow-xl';
     return (
         <button
             data-testid="sampling-button"
-            onMouseDown={() => update({ isDetecting: true })}
-            onMouseUp={() => update({ isDetecting: false })}
-            onTouchStart={() => update({ isDetecting: true })}
-            onTouchEnd={() => update({ isDetecting: false })}
-            className={`flex-[2] py-5 rounded-2xl font-black transition-all shadow-2xl active:scale-95 text-xs uppercase tracking-widest ${cls}`}
+            onClick={() => update({ isDetecting: !detecting })}
+            className={`flex-[2] py-6 rounded-2xl font-black transition-all active:scale-95 text-[10px] uppercase tracking-widest pointer-events-auto ${cls}`}
         >
-            {detecting ? '⏺ Sampling Asphalt...' : '⏺ Mark Catchment'}
+            {detecting ? '⏹ STOP SAMPLING' : '⏺ START SAMPLING'}
         </button>
     );
 }

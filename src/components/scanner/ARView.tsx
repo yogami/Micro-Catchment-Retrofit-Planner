@@ -1,5 +1,4 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { useDeviceOrientation } from '../../hooks/useDeviceOrientation';
 import { ScannerControls, ProgressBar } from './ui/ScannerControls';
 import { convertArea, getAreaUnit, convertFlow, getFlowUnit, convertVolume, getVolumeUnit } from '../../utils/units';
 import { useARScanner } from '../../hooks/useARScanner';
@@ -8,6 +7,7 @@ import { TapeCalibration } from './validation/TapeCalibration';
 import { ExportActionGroup, ResultHeader, ResultFooter } from './ui/ResultDisplay';
 import { GuidedCoverageOverlay } from './coverage/GuidedCoverageOverlay';
 import { CoverageHeatmap } from './coverage/CoverageHeatmap';
+
 type ScannerHook = ReturnType<typeof useARScanner>;
 
 export function ARView({ scanner }: { scanner: ScannerHook }) {
@@ -15,8 +15,6 @@ export function ARView({ scanner }: { scanner: ScannerHook }) {
     const [videoPlaying, setVideoPlaying] = useState(false);
 
     useCamera(scanner.isScanning, videoRef, (err) => scanner.update({ cameraError: err }));
-
-    const orientation = useDeviceOrientation();
 
     useEffect(() => {
         const v = videoRef.current;
@@ -43,7 +41,7 @@ export function ARView({ scanner }: { scanner: ScannerHook }) {
         return { key, worldX: gx * voxelSize, worldY: gy * voxelSize, voxelSize };
     }), [scanner.voxels]);
 
-    const cameraPosition = useMemo(() => ({ x: orientation.x, y: orientation.y }), [orientation.x, orientation.y]);
+    const cameraPosition = scanner.simulatedPos;
 
     return (
         <div className="fixed inset-0 bg-transparent z-0 overflow-hidden pointer-events-none">
@@ -61,23 +59,19 @@ export function ARView({ scanner }: { scanner: ScannerHook }) {
                 <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-gray-900 p-8 text-center pointer-events-auto">
                     <div className="w-16 h-16 border-8 border-emerald-500 border-t-transparent rounded-full animate-spin mb-8" />
                     <h3 className="text-white text-2xl font-black uppercase mb-2 tracking-tighter">Initializing Optics</h3>
-                    <p className="text-gray-400 text-sm mb-12 font-medium">Android requires a manual tap to activate high-performance video streams.</p>
-
                     <button
                         onClick={handleKickstart}
                         className="w-full max-w-xs bg-emerald-500 text-black py-8 rounded-3xl font-black uppercase tracking-widest text-lg shadow-[0_20px_50px_rgba(16,185,129,0.4)] active:scale-95 transition-all outline-none"
                     >
                         TAP TO START CAMERA
                     </button>
-
-                    <p className="mt-8 text-[10px] text-gray-500 uppercase font-bold tracking-widest opacity-50">Chrome Security Bypass Active</p>
+                    <p className="mt-8 text-[10px] text-gray-500 uppercase font-bold tracking-widest opacity-50 text-center">Chrome Security Bypass Active</p>
                 </div>
             )}
 
             {scanner.cameraError ? <CameraError error={scanner.cameraError} /> : (
                 <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                        <Reticle active={scanner.isDetecting} locked={scanner.isLocked} />
                         {!scanner.isLocked && <FloatingStatus scanner={scanner} />}
                     </div>
 
@@ -189,20 +183,6 @@ function HeatmapSection({ scanner, voxels }: {
     );
 }
 
-function Reticle({ active, locked }: { active: boolean; locked: boolean }) {
-    if (locked) return null;
-    return <ReticleBox active={active} />;
-}
-
-function ReticleBox({ active }: { active: boolean }) {
-    const cls = active ? 'border-emerald-400 scale-110 shadow-[0_0_20px_rgba(52,211,153,0.3)]' : 'border-white/30 scale-100';
-    return (
-        <div className={`w-32 h-32 border-2 border-dashed rounded-3xl transition-all duration-500 flex items-center justify-center ${cls}`}>
-            <div className={`w-2 h-2 rounded-full bg-white ${active ? 'animate-ping' : ''}`} />
-        </div>
-    );
-}
-
 function FloatingStatus({ scanner }: { scanner: ScannerHook }) {
     return (
         <div className="mt-8 flex flex-col items-center gap-4 pointer-events-auto">
@@ -293,7 +273,7 @@ function GenerationProgress({ scanner }: { scanner: ScannerHook }) {
 function SimulationStatus({ active }: { active: boolean }) {
     if (!active) return null;
     return (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-emerald-500/90 text-black px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest z-50 animate-pulse border border-white/20">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-emerald-500/90 text-black px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest z-[110] animate-pulse border border-white/20">
             📡 Scanning... (Sensors Active)
         </div>
     );

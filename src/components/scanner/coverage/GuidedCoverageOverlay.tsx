@@ -98,7 +98,7 @@ function getElevationRange(grid: ElevationGrid): { min: number; max: number } | 
 
 function MapOverlay({ voxels, percent, pos, out, size, boundary, elevationRange }: any) {
     return (
-        <div className="absolute top-4 right-4 bg-gray-900/90 backdrop-blur rounded-xl p-3 border border-white/10 shadow-xl pointer-events-auto">
+        <div className="absolute top-32 right-4 bg-gray-900/95 backdrop-blur-2xl rounded-2xl p-4 border border-white/20 shadow-2xl pointer-events-auto z-[100]">
             <MapHeader percent={percent} />
             <CoverageMap
                 voxels={voxels}

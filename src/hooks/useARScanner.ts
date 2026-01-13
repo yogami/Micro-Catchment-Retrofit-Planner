@@ -67,6 +67,7 @@ export interface ARScannerState {
     geoBoundary: GeoPolygon | null;
     elevationGrid: ElevationGrid | null;
     voxels: string[]; // Voxel keys for visualization
+    simulatedPos: { x: number; y: number };
 }
 
 export interface Services {
@@ -99,7 +100,8 @@ export function useARScanner() {
         optimizationResult: null, tapeValidation: null, validationError: null,
         depthMode: 'initializing', accuracyLabel: 'Initializing...',
         scanPhase: 'onboarding', geoBoundary: null, elevationGrid: null,
-        voxels: []
+        voxels: [],
+        simulatedPos: { x: 0, y: 0 }
     });
 
     const update = useCallback((u: Partial<ARScannerState>) => setState(s => ({ ...s, ...u })), []);
