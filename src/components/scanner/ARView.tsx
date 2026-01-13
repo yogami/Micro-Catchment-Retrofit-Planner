@@ -8,45 +8,70 @@ import { TapeCalibration } from './validation/TapeCalibration';
 import { ExportActionGroup, ResultHeader, ResultFooter } from './ui/ResultDisplay';
 import { GuidedCoverageOverlay } from './coverage/GuidedCoverageOverlay';
 import { CoverageHeatmap } from './coverage/CoverageHeatmap';
-
 type ScannerHook = ReturnType<typeof useARScanner>;
-
-function ConditionalWarning({ show }: { show: boolean }) {
-    if (!show) return null;
-    return <PermissionWarning />;
-}
 
 export function ARView({ scanner }: { scanner: ScannerHook }) {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const [videoPlaying, setVideoPlaying] = useState(false);
+
     useCamera(scanner.isScanning, videoRef, (err) => scanner.update({ cameraError: err }));
 
-    const [permissionWarning, setPermissionWarning] = useState(false);
     const orientation = useDeviceOrientation();
-    const coverageMode = 'guided'; // Primary mode for Micro-Catchment
 
-    // Map voxel strings from state to Voxel objects for the UI
+    useEffect(() => {
+        const v = videoRef.current;
+        if (!v) return;
+        const handlePlay = () => setVideoPlaying(true);
+        v.addEventListener('playing', handlePlay);
+        return () => v.removeEventListener('playing', handlePlay);
+    }, []);
+
+    const handleKickstart = async () => {
+        if (videoRef.current) {
+            try {
+                await videoRef.current.play();
+                setVideoPlaying(true);
+            } catch (e) {
+                console.error("Manual play failed:", e);
+            }
+        }
+    };
+
     const voxels = useMemo(() => scanner.voxels.map((key: string) => {
         const [gx, gy] = key.split(',').map(Number);
-        const voxelSize = 0.05; // Matches VoxelManager
-        return {
-            key,
-            worldX: gx * voxelSize,
-            worldY: gy * voxelSize,
-            voxelSize
-        };
+        const voxelSize = 0.05;
+        return { key, worldX: gx * voxelSize, worldY: gy * voxelSize, voxelSize };
     }), [scanner.voxels]);
 
-    usePermissionEffect(coverageMode, scanner, orientation, setPermissionWarning);
-
-    const mode = resolveMode(coverageMode, orientation.permissionDenied);
     const cameraPosition = useMemo(() => ({ x: orientation.x, y: orientation.y }), [orientation.x, orientation.y]);
 
-
     return (
-        <div className="relative rounded-2xl overflow-hidden bg-black aspect-[9/16] mb-6 shadow-2xl ring-1 ring-white/10">
-            <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
+        <div className="fixed inset-0 bg-black z-0 overflow-hidden">
+            <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="absolute inset-0 w-full h-full object-cover"
+            />
+
+            {/* BLACK SCREEN FAILSAFE */}
+            {!videoPlaying && scanner.isScanning && !scanner.cameraError && (
+                <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/90 p-8 text-center">
+                    <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-6" />
+                    <p className="text-white font-black uppercase tracking-widest text-sm mb-6">Camera Initializing...</p>
+                    <button
+                        onClick={handleKickstart}
+                        className="pointer-events-auto bg-emerald-500 text-black px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs animate-bounce"
+                    >
+                        Tap to Start Camera Feed
+                    </button>
+                    <p className="mt-4 text-[9px] text-gray-500 px-12">Android Chrome sometimes blocks video auto-play. Tap the green button to start.</p>
+                </div>
+            )}
+
             {scanner.cameraError ? <CameraError error={scanner.cameraError} /> : (
-                <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
                         <Reticle active={scanner.isDetecting} locked={scanner.isLocked} />
                         {!scanner.isLocked && <FloatingStatus scanner={scanner} />}
@@ -56,9 +81,8 @@ export function ARView({ scanner }: { scanner: ScannerHook }) {
 
                     {scanner.isLocked && <LockedResultCard scanner={scanner} />}
                     <ScannerControls scanner={scanner} />
-                    <ConditionalWarning show={permissionWarning} />
                     <CoverageContent
-                        mode={mode}
+                        mode="guided"
                         scanner={scanner}
                         voxels={voxels}
                         pos={cameraPosition}
@@ -76,7 +100,7 @@ function useCamera(isScanning: boolean, videoRef: React.RefObject<HTMLVideoEleme
             navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: 'environment',
-                    width: { ideal: 1280 }, // Lower resolution for better compatibility
+                    width: { ideal: 1280 },
                     height: { ideal: 720 }
                 }
             })
@@ -87,7 +111,7 @@ function useCamera(isScanning: boolean, videoRef: React.RefObject<HTMLVideoEleme
                         try {
                             await videoRef.current.play();
                         } catch (e) {
-                            console.error("Video play failed:", e);
+                            console.error("Auto-play failed:", e);
                         }
                     }
                 })
@@ -102,42 +126,12 @@ function useCamera(isScanning: boolean, videoRef: React.RefObject<HTMLVideoEleme
 
 function CameraError({ error }: { error: string }) {
     return (
-        <div className="absolute inset-0 flex items-center justify-center p-6 text-center bg-black/60">
+        <div className="absolute inset-0 z-[70] flex items-center justify-center p-6 text-center bg-black/60">
             <div className="bg-red-500/20 border border-red-500/50 rounded-2xl p-6">
                 <p className="text-red-400 font-bold mb-2">⚠️ Camera Error</p>
                 <p className="text-sm text-gray-300">{error}</p>
-                <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg text-xs font-bold">Retry</button>
+                <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg text-xs font-bold pointer-events-auto">Retry</button>
             </div>
-        </div>
-    );
-}
-
-function resolveMode(mode: string, denied: boolean) {
-    if (mode === 'guided' && denied) return 'heatmap';
-    return mode;
-}
-
-function usePermissionEffect(
-    mode: string,
-    scanner: ScannerHook,
-    orientation: ReturnType<typeof useDeviceOrientation>,
-    onWarn: (warn: boolean) => void
-) {
-    useEffect(() => {
-        if (shouldRequestPermission(mode, scanner)) {
-            orientation.requestPermission().then(granted => onWarn(!granted));
-        }
-    }, [mode, scanner, orientation, onWarn]);
-}
-
-function shouldRequestPermission(mode: string, scanner: ScannerHook) {
-    return mode === 'guided' && scanner.isScanning && !scanner.isLocked;
-}
-
-function PermissionWarning() {
-    return (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-yellow-500/90 text-black px-4 py-2 rounded-lg text-xs font-bold">
-            Motion permission denied. Using simplified mode.
         </div>
     );
 }
@@ -149,15 +143,6 @@ function CoverageContent({ mode, scanner, voxels, pos }: {
     pos: { x: number; y: number };
 }) {
     if (scanner.isLocked || !scanner.isScanning) return null;
-    return <ActiveCoverageContent mode={mode} scanner={scanner} voxels={voxels} pos={pos} />;
-}
-
-function ActiveCoverageContent({ mode, scanner, voxels, pos }: {
-    mode: string;
-    scanner: ScannerHook;
-    voxels: any[];
-    pos: { x: number; y: number };
-}) {
     if (mode === 'guided') return <GuidedSection scanner={scanner} voxels={voxels} pos={pos} />;
     if (mode === 'heatmap') return <HeatmapSection scanner={scanner} voxels={voxels} />;
     return null;
@@ -168,7 +153,6 @@ function GuidedSection({ scanner, voxels, pos }: {
     voxels: any[];
     pos: { x: number; y: number };
 }) {
-    // Convert GeoPolygon to local meters if available
     const presetBoundary = useMemo(() => {
         if (!scanner.geoBoundary || !scanner.location) return null;
         return scanner.geoBoundary.toLocalMeters(scanner.location);
@@ -181,7 +165,7 @@ function GuidedSection({ scanner, voxels, pos }: {
             coveragePercent={scanner.scanProgress}
             cameraPosition={pos}
             onComplete={() => scanner.update({ isLocked: true })}
-            onBoundarySet={() => { }} // Redundant in unified mode
+            onBoundarySet={() => { }}
             onElevationUpdate={(grid) => scanner.update({ elevationGrid: grid })}
             presetBoundary={presetBoundary}
         />
@@ -227,11 +211,9 @@ function FloatingStatus({ scanner }: { scanner: ScannerHook }) {
 function ScanIndicator({ detecting }: { detecting: boolean }) {
     const label = detecting ? 'Analyzing Surface...' : 'Identify Impervious Area';
     return (
-        <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex flex-col items-center gap-1">
-            <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${detecting ? 'bg-emerald-400 animate-pulse' : 'bg-white'}`} />
-                <p className="text-[10px] font-black tracking-widest text-white uppercase">{label}</p>
-            </div>
+        <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex flex-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${detecting ? 'bg-emerald-400 animate-pulse' : 'bg-white'}`} />
+            <p className="text-[10px] font-black tracking-widest text-white uppercase">{label}</p>
         </div>
     );
 }
@@ -244,18 +226,16 @@ function AreaBadge({ area, system }: { area: number; system: 'metric' | 'imperia
     );
 }
 
-
-
 function LockedResultCard({ scanner }: { scanner: ScannerHook }) {
     const [showCalibration, setShowCalibration] = useState(false);
     const area = Math.round(convertArea(scanner.detectedArea || 0, scanner.unitSystem));
     const unit = getAreaUnit(scanner.unitSystem);
 
     return (
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(16,185,129,0.1)_100%)] pointer-events-auto z-50">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(16,185,129,0.1)_100%)] pointer-events-auto z-50 overflow-y-auto pt-20 pb-10">
             {showCalibration && (
                 <TapeCalibration
-                    calculatedDistance={10.0} // Mocked for now, should come from boundary measurement
+                    calculatedDistance={10.0}
                     onCalibrate={(factor) => {
                         scanner.handleValidateTape((scanner.detectedArea || 0) * factor);
                         setShowCalibration(false);
@@ -263,7 +243,7 @@ function LockedResultCard({ scanner }: { scanner: ScannerHook }) {
                     onCancel={() => setShowCalibration(false)}
                 />
             )}
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[95%] animate-in slide-in-from-bottom-10 flex flex-col gap-3">
+            <div className="px-4 flex flex-col gap-3">
                 <SurveyGradeRibbon />
                 <div className="bg-gray-900/95 backdrop-blur-2xl border border-emerald-500/50 rounded-b-2xl p-5 shadow-2xl text-left">
                     <ResultSummary scanner={scanner} area={area} unit={unit} />
@@ -287,7 +267,6 @@ function SurveyGradeRibbon() {
     );
 }
 
-
 function ResultSummary({ scanner, area, unit }: { scanner: ScannerHook; area: number; unit: string }) {
     return (
         <div className="flex justify-between items-start mb-4">
@@ -299,7 +278,6 @@ function ResultSummary({ scanner, area, unit }: { scanner: ScannerHook; area: nu
 
 function GenerationProgress({ scanner }: { scanner: ScannerHook }) {
     if (scanner.scanProgress <= 0 || scanner.scanProgress >= 100) return null;
-
     return (
         <div className="mb-4">
             <ProgressBar progress={scanner.scanProgress} />
@@ -307,7 +285,6 @@ function GenerationProgress({ scanner }: { scanner: ScannerHook }) {
         </div>
     );
 }
-
 
 function SimulationStatus({ active }: { active: boolean }) {
     if (!active) return null;
@@ -329,4 +306,3 @@ function ResultMetrics({ scanner }: { scanner: ScannerHook }) {
         </div>
     );
 }
-

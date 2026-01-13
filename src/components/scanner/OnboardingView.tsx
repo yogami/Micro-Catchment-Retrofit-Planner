@@ -33,9 +33,9 @@ export function OnboardingView({ scanner }: { scanner: ReturnType<typeof useARSc
                         detectedArea: 0,
                         isLocked: false
                     })}
-                    className="w-full py-3 rounded-xl bg-gray-900 border border-emerald-500/30 text-emerald-400 text-xs font-black uppercase tracking-widest hover:bg-emerald-500/10 transition-all"
+                    className="w-full py-5 rounded-2xl bg-emerald-500 text-black font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all"
                 >
-                    ⏩ Quick Start (Internal Test)
+                    ⏩ Force Quick Scan (Bypass GPS)
                 </button>
             </div>
         </div>
