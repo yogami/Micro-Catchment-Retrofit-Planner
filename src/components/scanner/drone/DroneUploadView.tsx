@@ -9,6 +9,7 @@
 
 import { useState, useCallback } from 'react';
 import { useARScanner } from '../../../hooks/useARScanner';
+import { ElevationGrid } from '../../../lib/spatial-coverage';
 
 export function DroneUploadView({ scanner }: { scanner: ReturnType<typeof useARScanner> }) {
     const [files, setFiles] = useState<File[]>([]);
@@ -16,9 +17,16 @@ export function DroneUploadView({ scanner }: { scanner: ReturnType<typeof useARS
     const [progress, setProgress] = useState(0);
 
     const onFinish = useCallback(() => {
+        // Create a mock grid to enable export features during drone prototype testing
+        const grid = new ElevationGrid(1.0); // 1m resolution for macro drone results
+        grid.addSample({ x: 0, y: 0, elevation: 0.1, accuracy: 0.5, source: 'lidar', timestamp: Date.now() });
+        grid.addSample({ x: 5, y: 5, elevation: 0.5, accuracy: 0.5, source: 'lidar', timestamp: Date.now() });
+        grid.addSample({ x: -5, y: -5, elevation: -0.2, accuracy: 0.5, source: 'lidar', timestamp: Date.now() });
+
         // Simulate a completed reconstruction result
         scanner.update({
-            detectedArea: 250.5, // 250m² from drone
+            detectedArea: 250.5,
+            elevationGrid: grid,
             scanPhase: 'scanning',
             isLocked: true,
             scanProgress: 0

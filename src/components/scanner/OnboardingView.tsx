@@ -23,6 +23,16 @@ export function OnboardingView({ scanner }: { scanner: ReturnType<typeof useARSc
                 >
                     🚁 Upload Drone Media
                 </button>
+                <button
+                    onClick={() => scanner.update({
+                        scanPhase: 'scanning',
+                        isScanning: true,
+                        geoBoundary: null // Will use local session boundary
+                    })}
+                    className="w-full py-3 rounded-xl bg-gray-900 border border-emerald-500/30 text-emerald-400 text-xs font-black uppercase tracking-widest hover:bg-emerald-500/10 transition-all"
+                >
+                    ⏩ Quick Start (Internal Test)
+                </button>
             </div>
         </div>
     );

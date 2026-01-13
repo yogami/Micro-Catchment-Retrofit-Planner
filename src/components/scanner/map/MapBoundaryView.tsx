@@ -53,6 +53,7 @@ export function MapBoundaryView({
         if (!gps.isReady || !mapContainer.current || map.current) return;
         if (!MAPBOX_TOKEN) {
             console.warn('Mapbox token not configured');
+            setIsMapReady(true); // Still "ready" to show the UI even if the map is empty
             return;
         }
 
@@ -137,12 +138,21 @@ export function MapBoundaryView({
 
     // Render loading state while waiting for GPS
     if (!gps.isReady) {
-        return <GPSWaitingView accuracy={gps.accuracy} error={gps.error} />;
+        return <GPSWaitingView accuracy={gps.accuracy} error={gps.error} onSpoof={gps.spoof} />;
     }
 
     return (
-        <div className="relative w-full h-full" data-testid="map-boundary-view">
-            <div ref={mapContainer} className="absolute inset-0" />
+        <div className="relative w-full h-full bg-gray-900 overflow-hidden" data-testid="map-boundary-view">
+            <div ref={mapContainer} className="absolute inset-0 bg-gray-800" />
+            {!MAPBOX_TOKEN && (
+                <div className="absolute inset-0 flex items-center justify-center p-6 text-center z-10">
+                    <div className="bg-black/60 p-6 rounded-2xl border border-yellow-500/30">
+                        <p className="text-yellow-500 font-bold mb-2">🗺️ Mapbox Token Missing</p>
+                        <p className="text-xs text-gray-400">Please set VITE_MAPBOX_TOKEN in .env.local for satellite view.</p>
+                        <p className="text-[10px] text-gray-500 mt-2">You can still tap the screen to define area nodes.</p>
+                    </div>
+                </div>
+            )}
 
             <MapOverlay
                 vertexCount={vertices.length}
@@ -165,7 +175,11 @@ export function MapBoundaryView({
 /**
  * GPSWaitingView - Displayed while waiting for GPS lock.
  */
-function GPSWaitingView({ accuracy, error }: { accuracy: number | null; error: string | null }) {
+function GPSWaitingView({ accuracy, error, onSpoof }: {
+    accuracy: number | null;
+    error: string | null;
+    onSpoof: (lat: number, lon: number) => void;
+}) {
     return (
         <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-white p-6" data-testid="gps-waiting-view">
             <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-6" />
@@ -174,10 +188,16 @@ function GPSWaitingView({ accuracy, error }: { accuracy: number | null; error: s
                 {error ? error : 'Waiting for high-accuracy position...'}
             </p>
             {accuracy !== null && (
-                <p className="text-emerald-400 font-mono">
+                <p className="text-emerald-400 font-mono mb-6">
                     Current accuracy: ±{accuracy.toFixed(0)}m
                 </p>
             )}
+            <button
+                onClick={() => onSpoof(38.8977, -77.0365)} // Default to White House for demo
+                className="px-4 py-2 border border-white/20 rounded-lg text-xs font-bold text-gray-400 hover:text-white transition-colors"
+            >
+                Bypass GPS for Testing
+            </button>
         </div>
     );
 }
@@ -216,7 +236,7 @@ function MapControls({ canUndo, canClear, canConfirm, onUndo, onClear, onConfirm
     onCancel?: () => void;
 }) {
     return (
-        <div className="absolute bottom-6 left-4 right-4 flex justify-between items-center">
+        <div className="absolute bottom-6 left-4 right-4 flex justify-between items-center z-20">
             <div className="flex gap-2">
                 {onCancel && (
                     <button

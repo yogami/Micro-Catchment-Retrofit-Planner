@@ -109,9 +109,21 @@ export function useGPSAnchor(options: UseGPSAnchorOptions = {}) {
         return stopWatching;
     }, [startWatching, stopWatching]);
 
+    const spoof = useCallback((lat: number, lon: number) => {
+        stopWatching();
+        setState({
+            lat,
+            lon,
+            accuracy: 5,
+            isReady: true,
+            error: null
+        });
+    }, [stopWatching]);
+
     return useMemo(() => ({
         ...state,
         reset,
-        stopWatching
-    }), [state, reset, stopWatching]);
+        stopWatching,
+        spoof
+    }), [state, reset, stopWatching, spoof]);
 }
