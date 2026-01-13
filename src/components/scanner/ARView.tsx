@@ -30,9 +30,28 @@ function useCamera(isScanning: boolean, videoRef: React.RefObject<HTMLVideoEleme
     useEffect(() => {
         let stream: MediaStream | null = null;
         if (isScanning && videoRef.current) {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } })
-                .then(s => { stream = s; if (videoRef.current) videoRef.current.srcObject = s; })
-                .catch(() => onError("Camera access denied or unavailable."));
+            navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 1280 }, // Lower resolution for better compatibility
+                    height: { ideal: 720 }
+                }
+            })
+                .then(async s => {
+                    stream = s;
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = s;
+                        try {
+                            await videoRef.current.play();
+                        } catch (e) {
+                            console.error("Video play failed:", e);
+                        }
+                    }
+                })
+                .catch((e) => {
+                    console.error("Camera Error:", e);
+                    onError("Camera access denied or unavailable.");
+                });
         }
         return () => stream?.getTracks().forEach(t => t.stop());
     }, [isScanning, videoRef, onError]);
@@ -69,6 +88,8 @@ function ScannerUI({ scanner }: { scanner: ScannerHook }) {
                 <Reticle active={scanner.isDetecting} locked={scanner.isLocked} />
                 {!scanner.isLocked && <FloatingStatus scanner={scanner} />}
             </div>
+
+            <SimulationStatus active={scanner.isDetecting} />
 
             {scanner.isLocked && <LockedResultCard scanner={scanner} />}
             <ScannerControls scanner={scanner} />
@@ -287,6 +308,15 @@ function GenerationProgress({ scanner }: { scanner: ScannerHook }) {
     );
 }
 
+
+function SimulationStatus({ active }: { active: boolean }) {
+    if (!active) return null;
+    return (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-emerald-500/90 text-black px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest z-50 animate-pulse border border-white/20">
+            📡 Scanning... (Sensors Active)
+        </div>
+    );
+}
 
 function ResultMetrics({ scanner }: { scanner: ScannerHook }) {
     const isRate = scanner.sizingMode === 'rate';

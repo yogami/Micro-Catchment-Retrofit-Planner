@@ -23,10 +23,11 @@ export function useScannerVoxelMapping(
         let frameCount = 0;
 
         const tick = () => {
-            // Simulate movement
-            // In production, this would use actual DeviceOrientationEvent data
-            positionRef.current.x += (Math.random() - 0.5) * 0.1;
-            positionRef.current.y += (Math.random() - 0.5) * 0.1;
+            // Simulation Overdrive: Ensure there is always movement during a test
+            const angle = Date.now() / 500;
+            const radius = 0.5; // Walk in a small 50cm circle
+            positionRef.current.x = Math.cos(angle) * radius;
+            positionRef.current.y = Math.sin(angle) * radius;
 
             const isNew = voxelManagerRef.current.paint(
                 positionRef.current.x,
@@ -44,9 +45,10 @@ export function useScannerVoxelMapping(
 
             if (isNew) {
                 const area = voxelManagerRef.current.getArea();
+                const count = voxelManagerRef.current.getVoxelCount();
                 update({
                     detectedArea: area,
-                    scanProgress: Math.min((voxelManagerRef.current.getVoxelCount() / 400) * 100, 100) // 400 voxels = 1m²
+                    scanProgress: Math.min((count / 100) * 100, 100)
                 });
             }
 

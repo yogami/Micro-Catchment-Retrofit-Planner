@@ -143,7 +143,15 @@ export function MapBoundaryView({
 
     return (
         <div className="relative w-full h-full bg-gray-900 overflow-hidden" data-testid="map-boundary-view">
-            <div ref={mapContainer} className="absolute inset-0 bg-gray-800" />
+            <div ref={mapContainer} className="absolute inset-0 bg-gray-800">
+                {!MAPBOX_TOKEN && (
+                    <div className="absolute inset-0 grid grid-cols-10 grid-rows-10 pointer-events-none opacity-20">
+                        {Array.from({ length: 100 }).map((_, i) => (
+                            <div key={i} className="border border-white/40" />
+                        ))}
+                    </div>
+                )}
+            </div>
             {!MAPBOX_TOKEN && (
                 <div className="absolute inset-0 flex items-center justify-center p-6 text-center z-10">
                     <div className="bg-black/60 p-6 rounded-2xl border border-yellow-500/30">
