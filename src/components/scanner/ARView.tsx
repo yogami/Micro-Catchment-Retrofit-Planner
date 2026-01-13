@@ -114,8 +114,17 @@ function useScannerLifecycle(
     coverage: ReturnType<typeof useSpatialCoverage>
 ) {
     useEffect(() => {
-        coverage.setActive(scanner.isDetecting && scanner.isScanning && !scanner.isLocked);
-    }, [scanner.isDetecting, scanner.isScanning, scanner.isLocked, coverage]);
+        const active = scanner.isDetecting && scanner.isScanning && !scanner.isLocked;
+        coverage.setActive(active);
+
+        // BRIDGE: Sync area results back to the scanner state
+        if (active && coverage.stats) {
+            scanner.update({
+                detectedArea: coverage.stats.coveredAreaM2,
+                scanProgress: Math.min((coverage.voxels.length / 100) * 100, 100)
+            });
+        }
+    }, [scanner.isDetecting, scanner.isScanning, scanner.isLocked, coverage.stats, coverage.voxels.length]);
 }
 
 function usePermissionEffect(
@@ -287,6 +296,7 @@ function SurveyGradeRibbon() {
         </div>
     );
 }
+
 
 function ResultSummary({ scanner, area, unit }: { scanner: ScannerHook; area: number; unit: string }) {
     return (

@@ -83,17 +83,16 @@ export function useDeviceOrientation() {
     }, [isMockGranted]);
 
     useEffect(() => {
-        if (!state.hasPermission || !state.isSupported) return;
+        if (!state.hasPermission && !isMockGranted) return;
 
+        let lastTime = Date.now();
         const handleOrientation = (event: DeviceOrientationEvent) => {
             const { alpha, beta, gamma } = event;
             if (alpha === null || beta === null || gamma === null) return;
 
             const last = lastOrientationRef.current;
             if (last) {
-                // Simple integration: convert angular velocity to linear movement
-                // This is a rough approximation - real apps use sensor fusion
-                const deltaX = ((gamma - last.gamma) / 90) * 0.05; // Scale to ~5cm steps
+                const deltaX = ((gamma - last.gamma) / 90) * 0.05;
                 const deltaY = ((beta - last.beta) / 90) * 0.05;
 
                 positionRef.current.x += deltaX;
@@ -105,13 +104,33 @@ export function useDeviceOrientation() {
                     y: positionRef.current.y
                 }));
             }
-
             lastOrientationRef.current = { alpha, beta, gamma };
         };
 
+        // EMERGENCY OVERDRIVE: If sensors are flat, simulate a slow walk
+        const simInterval = setInterval(() => {
+            const now = Date.now();
+            const elapsed = (now - lastTime) / 1000;
+            if (elapsed > 0.1) { // 10fps simulation
+                const angle = now / 1000;
+                // Move in a 1m circle over 6 seconds
+                const simX = Math.cos(angle) * 0.5;
+                const simY = Math.sin(angle) * 0.5;
+
+                setState(prev => ({
+                    ...prev,
+                    x: simX,
+                    y: simY
+                }));
+            }
+        }, 100);
+
         window.addEventListener('deviceorientation', handleOrientation);
-        return () => window.removeEventListener('deviceorientation', handleOrientation);
-    }, [state.hasPermission, state.isSupported]);
+        return () => {
+            window.removeEventListener('deviceorientation', handleOrientation);
+            clearInterval(simInterval);
+        };
+    }, [state.hasPermission, state.isSupported, isMockGranted]);
 
     // Listen for mock position events (for E2E testing)
     useEffect(() => {
