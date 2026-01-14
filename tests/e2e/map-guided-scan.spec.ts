@@ -211,6 +211,142 @@ test.describe('Map-Guided AR Scan Workflow', () => {
 
         await expect(mapView.or(gpsView)).toBeVisible({ timeout: 10000 });
     });
+
+    // =====================================================
+    // Test 9: Clicking map adds vertex markers
+    // =====================================================
+    test('clicking map adds vertex markers and updates point count', async ({ page }) => {
+        await enterScannerViaDemo(page);
+        await page.getByRole('button', { name: /Define Scan Area/i }).click();
+
+        // Wait for map view to be ready
+        const mapView = page.getByTestId('map-boundary-view');
+        await expect(mapView).toBeVisible({ timeout: 10000 });
+
+        // Wait for map to fully initialize (Mapbox needs time)
+        await page.waitForTimeout(1000);
+
+        // Get the map container and simulate clicks at different positions
+        const mapContainer = page.locator('[data-testid="map-boundary-view"]');
+        const box = await mapContainer.boundingBox();
+
+        if (box) {
+            // Click 4 points to form a quadrilateral
+            await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.3);
+            await page.waitForTimeout(200);
+            await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.3);
+            await page.waitForTimeout(200);
+            await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.7);
+            await page.waitForTimeout(200);
+            await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.7);
+            await page.waitForTimeout(200);
+
+            // Should show point count in diagnostics
+            await expect(page.getByText(/Points: 4/i)).toBeVisible({ timeout: 5000 });
+        }
+    });
+
+    // =====================================================
+    // Test 10: Confirm button becomes visible after min vertices
+    // =====================================================
+    test('confirm button appears after minimum vertices are added', async ({ page }) => {
+        await enterScannerViaDemo(page);
+        await page.getByRole('button', { name: /Define Scan Area/i }).click();
+
+        const mapView = page.getByTestId('map-boundary-view');
+        await expect(mapView).toBeVisible({ timeout: 10000 });
+        await page.waitForTimeout(1000);
+
+        const mapContainer = page.locator('[data-testid="map-boundary-view"]');
+        const box = await mapContainer.boundingBox();
+
+        if (box) {
+            // Click 4 points (minimum required)
+            for (let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI * 2) / 4;
+                const x = box.x + box.width / 2 + Math.cos(angle) * box.width * 0.3;
+                const y = box.y + box.height / 2 + Math.sin(angle) * box.height * 0.3;
+                await page.mouse.click(x, y);
+                await page.waitForTimeout(200);
+            }
+
+            // Confirm button should now be visible and enabled
+            const confirmBtn = page.getByTestId('confirm-boundary-button');
+            await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+            await expect(confirmBtn).toBeEnabled();
+        }
+    });
+
+    // =====================================================
+    // Test 11: Full workflow - Draw polygon → Confirm → Scanning starts
+    // =====================================================
+    test('full flow: draw polygon → confirm → transitions to scanning', async ({ page }) => {
+        await enterScannerViaDemo(page);
+        await page.getByRole('button', { name: /Define Scan Area/i }).click();
+
+        const mapView = page.getByTestId('map-boundary-view');
+        await expect(mapView).toBeVisible({ timeout: 10000 });
+        await page.waitForTimeout(1000);
+
+        const mapContainer = page.locator('[data-testid="map-boundary-view"]');
+        const box = await mapContainer.boundingBox();
+
+        if (box) {
+            // Draw quadrilateral
+            await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.25);
+            await page.waitForTimeout(150);
+            await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.25);
+            await page.waitForTimeout(150);
+            await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.75);
+            await page.waitForTimeout(150);
+            await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.75);
+            await page.waitForTimeout(300);
+
+            // Click Confirm Boundary
+            const confirmBtn = page.getByTestId('confirm-boundary-button');
+            await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+            await confirmBtn.click();
+
+            // Should transition to scanning phase
+            // Look for scanning indicators: walking view elements OR analysis panel (if completed fast)
+            await expect(
+                page.getByTestId('stop-scanning-button')
+                    .or(page.getByText(/Recording Coverage/i))
+                    .or(page.getByText(/Keep Walking/i))
+                    .or(page.getByText(/Hydrology Mitigation Strategy/i)) // Analysis panel shown if scan completes
+                    .or(page.getByText(/Grant Eligibility/i))
+            ).toBeVisible({ timeout: 10000 });
+        }
+    });
+
+    // =====================================================
+    // Test 12: Polygon geometry shows as "COMPLETE" after min vertices
+    // =====================================================
+    test('polygon hull shows COMPLETE status after enough vertices', async ({ page }) => {
+        await enterScannerViaDemo(page);
+        await page.getByRole('button', { name: /Define Scan Area/i }).click();
+
+        const mapView = page.getByTestId('map-boundary-view');
+        await expect(mapView).toBeVisible({ timeout: 10000 });
+        await page.waitForTimeout(1000);
+
+        const mapContainer = page.locator('[data-testid="map-boundary-view"]');
+        const box = await mapContainer.boundingBox();
+
+        if (box) {
+            // Add 4 vertices
+            for (let i = 0; i < 4; i++) {
+                await page.mouse.click(
+                    box.x + box.width * (0.3 + (i % 2) * 0.4),
+                    box.y + box.height * (0.3 + Math.floor(i / 2) * 0.4)
+                );
+                await page.waitForTimeout(200);
+            }
+
+            // Should show COMPLETE hull status
+            await expect(page.getByText(/Hull: COMPLETE/i)).toBeVisible({ timeout: 5000 });
+        }
+    });
 });
 
 // =====================================================

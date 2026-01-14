@@ -130,6 +130,27 @@ export function MapBoundaryView({
         }
     }, [vertices, canConfirm, onBoundaryConfirmed]);
 
+    // Fallback click handler for when Mapbox internal clicks don't fire (e.g., E2E tests)
+    const handleContainerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        if (!map.current || !canAddMore) return;
+
+        // Get click position relative to container
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // Use Mapbox's unproject to convert screen coords to geo coords
+        const lngLat = map.current.unproject([x, y]);
+
+        const newVertex: GeoVertex = {
+            lat: lngLat.lat,
+            lon: lngLat.lng
+        };
+
+        setVertices(prev => [...prev, newVertex]);
+        if (navigator.vibrate) navigator.vibrate(20);
+    }, [canAddMore]);
+
     // Render loading state while waiting for GPS
     if (!gps.isReady) {
         return <GPSWaitingView accuracy={gps.accuracy} error={gps.error} onSpoof={gps.spoof} />;
@@ -140,8 +161,19 @@ export function MapBoundaryView({
             {/* Camera Floor Layer */}
             <PlanningCameraBackground />
 
-            {/* Tactical Grid / Map Container */}
-            <div ref={mapContainer} className="absolute inset-0 bg-transparent z-10" />
+            {/* Tactical Grid / Map Container - onClick for fallback/E2E compatibility */}
+            <div
+                ref={mapContainer}
+                className="absolute inset-0 bg-transparent z-10"
+                data-testid="map-canvas-container"
+            />
+
+            {/* Transparent Click Capture Overlay - ensures clicks work in E2E and when Mapbox events fail */}
+            <div
+                className="absolute inset-0 z-15 cursor-crosshair"
+                onClick={handleContainerClick}
+                data-testid="click-capture-overlay"
+            />
 
             {/* Mapbox Token Missing Fallback Grid */}
             {!MAPBOX_TOKEN && (
