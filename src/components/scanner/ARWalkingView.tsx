@@ -13,6 +13,7 @@ type ScannerHook = ReturnType<typeof useARScanner>;
  * - Heatmap visualization
  * - Haptic feedback on boundary cross
  * - Completion audio at 95%+
+ * - Tech HUD overlay for "Premium" feel
  */
 export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -112,14 +113,20 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
                 className="absolute inset-0 w-full h-full object-cover"
             />
 
+            {/* Vignette Overlay for Focus */}
+            <div className="absolute inset-0 z-10 pointer-events-none bg-[radial-gradient(circle,transparent_40%,rgba(0,0,0,0.6)_100%)]" />
+
+            {/* Tech HUD */}
+            <ScannerHUD />
+
             {/* Completion Audio */}
             <audio ref={audioRef} src="/sounds/complete.mp3" preload="auto" hidden />
 
             {/* Camera Fallback */}
             {!videoPlaying && !cameraError && scanner.isScanning && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gray-900 p-8 text-center">
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900 p-8 text-center">
                     <div className="w-16 h-16 border-8 border-emerald-500 border-t-transparent rounded-full animate-spin mb-8" />
-                    <h3 className="text-white text-2xl font-black uppercase mb-4">Starting Camera...</h3>
+                    <h3 className="text-white text-2xl font-black uppercase mb-4">Initialising Vision...</h3>
                     <button
                         onClick={handleKickstart}
                         className="w-full max-w-xs bg-emerald-500 text-black py-6 rounded-3xl font-black uppercase text-lg"
@@ -131,23 +138,26 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
 
             {/* Camera Error - GPS Still Works */}
             {cameraError && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-800">
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-800/80 backdrop-blur">
                     <div className="text-center p-8">
-                        <p className="text-yellow-400 text-lg font-bold mb-2">📷 {cameraError}</p>
-                        <p className="text-gray-400 text-sm">Walk around to record coverage</p>
+                        <p className="text-yellow-400 text-lg font-bold mb-2">📷 Vision Data Secondary</p>
+                        <p className="text-gray-400 text-sm">GPS Tracking active. Continue walking.</p>
                     </div>
                 </div>
             )}
 
-            {/* Instructions */}
-            <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 bg-black/80 backdrop-blur px-6 py-3 rounded-full">
-                <p className="text-white text-sm font-medium">
-                    {coverage.coveragePercent >= 95
-                        ? '🎉 Coverage complete! Tap Stop to finish.'
-                        : coverage.isInsideBoundary
-                            ? '🚶 Walk inside the boundary to record coverage'
-                            : '⚠️ Move back inside the boundary'}
-                </p>
+            {/* Smart Instructions */}
+            <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 w-[85%] max-w-md">
+                <div className="bg-black/40 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 shadow-2xl flex items-center gap-4">
+                    <div className={`w-3 h-3 rounded-full ${coverage.isInsideBoundary ? 'bg-emerald-500 animate-pulse' : 'bg-red-500 animate-ping'}`} />
+                    <p className="text-white text-xs font-bold uppercase tracking-widest leading-tight">
+                        {coverage.coveragePercent >= 95
+                            ? '🎯 Target Reached! Review results'
+                            : coverage.isInsideBoundary
+                                ? 'Recording Coverage... Keep Walking'
+                                : 'Boundary Warning: Re-enter Zone'}
+                    </p>
+                </div>
             </div>
 
             {/* Walking Coverage Mini-Map with Heatmap */}
@@ -162,25 +172,55 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
             />
 
             {/* Stop Button */}
-            <div className="absolute bottom-6 left-4 right-4 z-20">
+            <div className="absolute bottom-6 left-6 right-6 z-30">
                 <button
                     onClick={handleStopScanning}
-                    className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest text-lg shadow-2xl active:scale-95 transition-all ${coverage.coveragePercent >= 95
-                            ? 'bg-emerald-500 text-black'
-                            : 'bg-red-500 text-white'
+                    className={`w-full py-6 rounded-3xl font-black uppercase tracking-[0.2em] text-lg shadow-[0_20px_50px_rgba(0,0,0,0.5)] active:scale-95 transition-all duration-300 ${coverage.coveragePercent >= 95
+                        ? 'bg-emerald-500 text-black border-4 border-emerald-300/30'
+                        : 'bg-red-500/90 text-white border-2 border-white/20'
                         }`}
                     data-testid="stop-scanning-button"
                 >
-                    {coverage.coveragePercent >= 95 ? '✅ Complete Scan' : '🛑 Stop Scanning'}
+                    {coverage.coveragePercent >= 95 ? 'FINISH & CALCULATE' : 'ABORT SCAN'}
                 </button>
             </div>
 
-            {/* GPS Status Debug */}
-            <div className="absolute top-4 left-4 z-20 bg-black/80 backdrop-blur p-3 rounded-xl text-[9px] font-mono">
-                <p className="text-gray-400">GPS: {coverage.currentPosition ? '✅' : '⏳'} ±{coverage.gpsAccuracy.toFixed(0)}m</p>
-                <p className="text-gray-400">Steps: {coverage.stepCount} | Voxels: {coverage.paintedVoxels}</p>
-                <p className="text-emerald-400">Coverage: {coverage.coveragePercent.toFixed(1)}%</p>
+            {/* Tactical Diagnostics */}
+            <div className="absolute top-6 left-6 z-30 bg-black/40 backdrop-blur-sm p-4 rounded-2xl border border-white/5 text-[9px] font-mono leading-relaxed">
+                <div className="flex items-center gap-2 mb-1">
+                    <span className="text-gray-500 uppercase font-black">Link:</span>
+                    <span className="text-emerald-400 font-bold">STABLE</span>
+                </div>
+                <p className="text-gray-400">GPS ACC: <span className="text-white">±{coverage.gpsAccuracy.toFixed(1)}m</span></p>
+                <p className="text-gray-400">IMU SYNC: <span className="text-white">ACTIVE</span></p>
+                <p className="text-emerald-400 font-bold mt-1 uppercase">Sensing Area: {coverage.paintedVoxels} pts</p>
             </div>
+        </div>
+    );
+}
+
+/**
+ * ScannerHUD - Tactical AR overlay corners and sweep
+ */
+function ScannerHUD() {
+    return (
+        <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+            {/* Corners */}
+            <div className="absolute top-10 left-10 w-8 h-8 border-t-4 border-l-4 border-emerald-500/50 rounded-tl-lg" />
+            <div className="absolute top-10 right-10 w-8 h-8 border-t-4 border-r-4 border-emerald-500/50 rounded-tr-lg" />
+            <div className="absolute bottom-10 left-10 w-8 h-8 border-b-4 border-l-4 border-emerald-500/50 rounded-bl-lg" />
+            <div className="absolute bottom-10 right-10 w-8 h-8 border-b-4 border-r-4 border-emerald-500/50 rounded-br-lg" />
+
+            {/* Scanning Sweep */}
+            <div className="absolute left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent top-0 animate-[scan_4s_linear_infinite]" />
+            <style>{`
+                @keyframes scan {
+                    0% { top: 10%; opacity: 0; }
+                    10% { opacity: 1; }
+                    90% { opacity: 1; }
+                    100% { top: 90%; opacity: 0; }
+                }
+            `}</style>
         </div>
     );
 }

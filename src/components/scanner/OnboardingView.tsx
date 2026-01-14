@@ -23,20 +23,6 @@ export function OnboardingView({ scanner }: { scanner: ReturnType<typeof useARSc
                 >
                     🚁 Upload Drone Media
                 </button>
-                <button
-                    onClick={() => scanner.update({
-                        location: { lat: 38.8977, lon: -77.0365 },
-                        locationName: 'Test Area (Indoor)',
-                        scanPhase: 'scanning',
-                        isScanning: true,
-                        geoBoundary: null,
-                        detectedArea: 0,
-                        isLocked: false
-                    })}
-                    className="w-full py-5 rounded-2xl bg-emerald-500 text-black font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all"
-                >
-                    ⏩ Force Quick Scan (Bypass GPS)
-                </button>
             </div>
         </div>
     );

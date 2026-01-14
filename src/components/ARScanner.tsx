@@ -30,7 +30,8 @@ export function ARScanner() {
 }
 
 function DebugDashboard({ scanner }: { scanner: any }) {
-    const isScanning = scanner.scanPhase === 'scanning';
+    if (scanner.scanPhase === 'scanning' && !scanner.isLocked) return null;
+
     return (
         <div className="fixed top-20 left-4 z-[100] bg-black/80 backdrop-blur p-3 rounded-2xl border border-white/10 font-mono text-[9px] pointer-events-none shadow-2xl">
             <p className="text-gray-500 mb-2 font-black uppercase tracking-tighter flex items-center gap-2">
@@ -48,12 +49,6 @@ function DebugDashboard({ scanner }: { scanner: any }) {
                 <span className="text-cyan-400">{scanner.detectedArea?.toFixed(2) || '0.00'}</span>
                 <span className="text-gray-400">Progress:</span>
                 <span className="text-emerald-400">{scanner.scanProgress.toFixed(0)}%</span>
-                {isScanning && (
-                    <>
-                        <span className="text-gray-400">Sim Mode:</span>
-                        <span className="text-yellow-400">ACTIVE</span>
-                    </>
-                )}
             </div>
         </div>
     );
