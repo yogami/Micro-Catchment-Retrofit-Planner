@@ -131,4 +131,35 @@ export class GeoPolygon {
 
         return area / 2;
     }
+
+    /**
+     * Get bounding box of the polygon.
+     */
+    getBounds(): { minLat: number; maxLat: number; minLon: number; maxLon: number } {
+        let minLat = Infinity, maxLat = -Infinity;
+        let minLon = Infinity, maxLon = -Infinity;
+
+        for (const v of this._vertices) {
+            minLat = Math.min(minLat, v.lat);
+            maxLat = Math.max(maxLat, v.lat);
+            minLon = Math.min(minLon, v.lon);
+            maxLon = Math.max(maxLon, v.lon);
+        }
+
+        return { minLat, maxLat, minLon, maxLon };
+    }
+
+    /**
+     * Alias for centroid getter as method.
+     */
+    getCentroid(): LatLon {
+        return this.centroid;
+    }
+
+    /**
+     * Alias for contains method.
+     */
+    containsPoint(lat: number, lon: number): boolean {
+        return this.contains(lat, lon);
+    }
 }

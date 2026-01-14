@@ -51,20 +51,38 @@ interface SceneData {
  * Orchestrates the drawing of all layers. CC=1
  */
 function renderScene(ctx: CanvasRenderingContext2D, data: SceneData) {
-    drawBackground(ctx, data.size);
+    drawBackground(ctx, data.size, data.viewport);
     drawVoxels(ctx, data.voxels, data.viewport);
     if (data.boundary) drawBoundary(ctx, data.boundary, data.viewport);
     drawCamera(ctx, data.cam, data.viewport);
     drawFrame(ctx, data.isOutOfBounds, data.size);
 }
 
-function drawBackground(ctx: CanvasRenderingContext2D, size: number) {
-    ctx.fillStyle = '#1f2937';
-    ctx.fillRect(0, 0, size, size);
+function drawBackground(ctx: CanvasRenderingContext2D, size: number, vp: MapViewport) {
+    ctx.clearRect(0, 0, size, size);
+
+    // Draw a subtle grid to show movement when camera is centered
+    const gridSpacing = vp.projectSize(1.0); // 1 meter spacing
+    const offsetX = (vp.minX % 1.0) * vp.scale;
+    const offsetY = (vp.minY % 1.0) * vp.scale;
+
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+
+    for (let x = -offsetX; x < size; x += gridSpacing) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, size);
+    }
+    for (let y = -offsetY; y < size; y += gridSpacing) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(size, y);
+    }
+    ctx.stroke();
 }
 
 function drawVoxels(ctx: CanvasRenderingContext2D, voxels: Voxel[], vp: MapViewport) {
-    ctx.fillStyle = '#3b82f6';
+    ctx.fillStyle = 'rgba(59, 130, 246, 0.7)'; // Transparent blue
     voxels.forEach(v => {
         const p = vp.project(v.worldX, v.worldY);
         const s = vp.projectSize(v.voxelSize);

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo } from 'react';
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { ScannerControls, ProgressBar } from './ui/ScannerControls';
 import { convertArea, getAreaUnit, convertFlow, getFlowUnit, convertVolume, getVolumeUnit } from '../../utils/units';
 import { useARScanner } from '../../hooks/useARScanner';
@@ -14,7 +14,11 @@ export function ARView({ scanner }: { scanner: ScannerHook }) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [videoPlaying, setVideoPlaying] = useState(false);
 
-    useCamera(scanner.isScanning, videoRef, (err) => scanner.update({ cameraError: err }));
+    const handleCameraError = useCallback((err: string) => {
+        scanner.update({ cameraError: err });
+    }, [scanner]);
+
+    useCamera(scanner.isScanning, videoRef, handleCameraError);
 
     useEffect(() => {
         const v = videoRef.current;

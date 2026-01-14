@@ -3,7 +3,7 @@ import { DemoOverlay } from './DemoOverlay';
 import { useDemoState } from '../hooks/useDemoState';
 import { ScannerHeader } from './scanner/ScannerHeader';
 import { OnboardingView } from './scanner/OnboardingView';
-import { ARView } from './scanner/ARView';
+import { ARWalkingView } from './scanner/ARWalkingView';
 import { AnalysisPanel } from './scanner/AnalysisPanel';
 import { MapBoundaryView } from './scanner/map/MapBoundaryView';
 import { DroneUploadView } from './scanner/drone/DroneUploadView';
@@ -105,16 +105,14 @@ function ScannerBody({ scanner }: { scanner: ScannerHook }) {
 }
 
 function ScanningInterface({ scanner }: { scanner: ScannerHook }) {
-    return (
-        <div className="px-4">
-            <ARView scanner={scanner} />
-            <AnalysisPanelContainer scanner={scanner} />
-        </div>
-    );
-}
+    // If locked, show results; otherwise show walking view
+    if (scanner.isLocked) {
+        return (
+            <div className="px-4">
+                <AnalysisPanel scanner={scanner} />
+            </div>
+        );
+    }
 
-function AnalysisPanelContainer({ scanner }: { scanner: ScannerHook }) {
-    const show = scanner.detectedArea !== null && scanner.isLocked;
-    if (!show) return null;
-    return <AnalysisPanel scanner={scanner} />;
+    return <ARWalkingView scanner={scanner} />;
 }

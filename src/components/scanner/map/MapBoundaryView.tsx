@@ -142,8 +142,10 @@ export function MapBoundaryView({
     }
 
     return (
-        <div className="relative w-full h-full bg-gray-900 overflow-hidden" data-testid="map-boundary-view">
-            <div ref={mapContainer} className="absolute inset-0 bg-gray-800">
+        <div className="relative w-full h-full bg-black overflow-hidden" data-testid="map-boundary-view">
+            <PlanningCameraBackground />
+
+            <div ref={mapContainer} className="absolute inset-0 bg-transparent">
                 {!MAPBOX_TOKEN && (
                     <div className="absolute inset-0 grid grid-cols-10 grid-rows-10 pointer-events-none opacity-20">
                         {Array.from({ length: 100 }).map((_, i) => (
@@ -294,6 +296,7 @@ function updatePolygonLayer(map: mapboxgl.Map, vertices: GeoVertex[]) {
 
     // Remove existing layer and source
     if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (map.getLayer(`${layerId}-outline`)) map.removeLayer(`${layerId}-outline`);
     if (map.getSource(sourceId)) map.removeSource(sourceId);
 
     if (vertices.length < 3) return;
@@ -335,4 +338,37 @@ function updatePolygonLayer(map: mapboxgl.Map, vertices: GeoVertex[]) {
             'line-width': 2
         }
     });
+}
+
+/**
+ * PlanningCameraBackground - Provides a live camera background for the planning phase
+ * to satisfy user preference for camera visibility in all phases.
+ */
+function PlanningCameraBackground() {
+    const videoRef = useRef<HTMLVideoElement>(null);
+
+    useEffect(() => {
+        let stream: MediaStream | null = null;
+        if (videoRef.current) {
+            navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' }
+            }).then(s => {
+                stream = s;
+                if (videoRef.current) videoRef.current.srcObject = s;
+            }).catch(e => console.error("Planning camera failed:", e));
+        }
+        return () => {
+            if (stream) stream.getTracks().forEach(t => t.stop());
+        };
+    }, []);
+
+    return (
+        <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="absolute inset-0 w-full h-full object-cover opacity-30 brightness-50 grayscale"
+        />
+    );
 }
