@@ -22,8 +22,9 @@ import { useScannerLocation } from './scanner/useScannerLocation';
 import { useScannerDemo } from './scanner/useScannerDemo';
 import { useScannerHydrology } from './scanner/useScannerHydrology';
 import { useScannerCompliance } from './scanner/useScannerCompliance';
-import { type DepthMode } from '../lib/depth-sensing';
 import { type ElevationGrid, type GeoPolygon } from '../lib/spatial-coverage';
+
+export type DepthMode = 'lidar' | 'visual-slam' | 'initializing';
 
 export type ScanPhase = 'onboarding' | 'planning' | 'scanning' | 'drone_upload';
 

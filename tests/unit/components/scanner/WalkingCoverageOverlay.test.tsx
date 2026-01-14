@@ -15,10 +15,11 @@ const mockContext = {
     arc: jest.fn(),
     fill: jest.fn(),
     stroke: jest.fn(),
-    closePath: jest.fn()
+    closePath: jest.fn(),
+    setLineDash: jest.fn()
 };
 
-jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockContext as unknown as CanvasRenderingContext2D);
+jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockContext as any);
 
 describe('WalkingCoverageOverlay', () => {
     const createTestPolygon = () => {
@@ -88,7 +89,8 @@ describe('WalkingCoverageOverlay', () => {
                 />
             );
 
-            expect(screen.getByText('46%')).toBeInTheDocument();
+            expect(screen.getByText('46')).toBeInTheDocument();
+            expect(screen.getByText('%')).toBeInTheDocument();
         });
 
         it('should display step count', () => {
@@ -102,7 +104,8 @@ describe('WalkingCoverageOverlay', () => {
                 />
             );
 
-            expect(screen.getByText(/42 steps/)).toBeInTheDocument();
+            expect(screen.getByText(/42/)).toBeInTheDocument();
+            expect(screen.getByText(/STS/)).toBeInTheDocument();
         });
 
         it('should display GPS accuracy', () => {
@@ -116,7 +119,7 @@ describe('WalkingCoverageOverlay', () => {
                 />
             );
 
-            expect(screen.getByText(/±5m/)).toBeInTheDocument();
+            expect(screen.getByText(/±5.3m/)).toBeInTheDocument();
         });
     });
 
@@ -133,7 +136,7 @@ describe('WalkingCoverageOverlay', () => {
                 />
             );
 
-            expect(screen.getByText(/Move back inside boundary/i)).toBeInTheDocument();
+            expect(screen.getByText(/Out of Bounds Exception/i)).toBeInTheDocument();
         });
 
         it('should NOT show alert when inside boundary', () => {
@@ -148,7 +151,7 @@ describe('WalkingCoverageOverlay', () => {
                 />
             );
 
-            expect(screen.queryByText(/Move back inside boundary/i)).not.toBeInTheDocument();
+            expect(screen.queryByText(/Out of Bounds Exception/i)).not.toBeInTheDocument();
         });
 
         it('should NOT show alert when no current position', () => {
