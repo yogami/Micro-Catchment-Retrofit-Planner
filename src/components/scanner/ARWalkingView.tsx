@@ -6,17 +6,23 @@ import { WalkingCoverageOverlay } from './coverage/WalkingCoverageOverlay';
 type ScannerHook = ReturnType<typeof useARScanner>;
 
 /**
- * ARWalkingView - Simplified AR view for GPS-based walking coverage.
+ * ARWalkingView - Enhanced GPS-based walking coverage with gamified feedback.
  * 
- * Shows camera feed as background (visual only) with mini-map overlay
- * showing GPS position and painted voxels.
+ * Features:
+ * - GPS + IMU fusion for accurate tracking
+ * - Heatmap visualization
+ * - Haptic feedback on boundary cross
+ * - Completion audio at 95%+
  */
 export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const audioRef = useRef<HTMLAudioElement>(null);
     const [videoPlaying, setVideoPlaying] = useState(false);
     const [cameraError, setCameraError] = useState<string | null>(null);
+    const [wasInside, setWasInside] = useState(true);
+    const [hasPlayedCompletion, setHasPlayedCompletion] = useState(false);
 
-    // GPS Walking Coverage
+    // GPS Walking Coverage with IMU fusion
     const coverage = useGPSWalkingCoverage(scanner.geoBoundary, scanner.isScanning);
 
     // Sync coverage data to scanner state
@@ -27,6 +33,27 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
             voxels: coverage.getVoxelArray().map(v => v.key)
         });
     }, [coverage.coveragePercent, coverage.paintedVoxels, scanner.geoBoundary]);
+
+    // Haptic feedback when crossing boundary
+    useEffect(() => {
+        if (wasInside && !coverage.isInsideBoundary) {
+            // Just crossed OUT of boundary
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        } else if (!wasInside && coverage.isInsideBoundary) {
+            // Just crossed BACK IN
+            if (navigator.vibrate) navigator.vibrate(50);
+        }
+        setWasInside(coverage.isInsideBoundary);
+    }, [coverage.isInsideBoundary, wasInside]);
+
+    // Completion celebration at 95%+
+    useEffect(() => {
+        if (coverage.coveragePercent >= 95 && !hasPlayedCompletion) {
+            setHasPlayedCompletion(true);
+            if (navigator.vibrate) navigator.vibrate([50, 50, 50, 50, 100]);
+            audioRef.current?.play().catch(() => { }); // Play sound if available
+        }
+    }, [coverage.coveragePercent, hasPlayedCompletion]);
 
     // Start camera (visual only)
     useEffect(() => {
@@ -85,6 +112,9 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
                 className="absolute inset-0 w-full h-full object-cover"
             />
 
+            {/* Completion Audio */}
+            <audio ref={audioRef} src="/sounds/complete.mp3" preload="auto" hidden />
+
             {/* Camera Fallback */}
             {!videoPlaying && !cameraError && scanner.isScanning && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gray-900 p-8 text-center">
@@ -112,36 +142,43 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
             {/* Instructions */}
             <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 bg-black/80 backdrop-blur px-6 py-3 rounded-full">
                 <p className="text-white text-sm font-medium">
-                    {coverage.isInsideBoundary
-                        ? '🚶 Walk inside the boundary to record coverage'
-                        : '⚠️ Move back inside the boundary'}
+                    {coverage.coveragePercent >= 95
+                        ? '🎉 Coverage complete! Tap Stop to finish.'
+                        : coverage.isInsideBoundary
+                            ? '🚶 Walk inside the boundary to record coverage'
+                            : '⚠️ Move back inside the boundary'}
                 </p>
             </div>
 
-            {/* Walking Coverage Mini-Map */}
+            {/* Walking Coverage Mini-Map with Heatmap */}
             <WalkingCoverageOverlay
                 boundary={scanner.geoBoundary}
                 currentPosition={coverage.currentPosition}
                 voxels={coverage.getVoxelArray()}
                 isInsideBoundary={coverage.isInsideBoundary}
                 coveragePercent={coverage.coveragePercent}
+                stepCount={coverage.stepCount}
+                gpsAccuracy={coverage.gpsAccuracy}
             />
 
             {/* Stop Button */}
             <div className="absolute bottom-6 left-4 right-4 z-20">
                 <button
                     onClick={handleStopScanning}
-                    className="w-full py-5 bg-red-500 text-white rounded-2xl font-black uppercase tracking-widest text-lg shadow-2xl active:scale-95 transition-all"
+                    className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest text-lg shadow-2xl active:scale-95 transition-all ${coverage.coveragePercent >= 95
+                            ? 'bg-emerald-500 text-black'
+                            : 'bg-red-500 text-white'
+                        }`}
                     data-testid="stop-scanning-button"
                 >
-                    🛑 Stop Scanning
+                    {coverage.coveragePercent >= 95 ? '✅ Complete Scan' : '🛑 Stop Scanning'}
                 </button>
             </div>
 
             {/* GPS Status Debug */}
             <div className="absolute top-4 left-4 z-20 bg-black/80 backdrop-blur p-3 rounded-xl text-[9px] font-mono">
-                <p className="text-gray-400">GPS: {coverage.currentPosition ? '✅' : '⏳'}</p>
-                <p className="text-gray-400">Voxels: {coverage.paintedVoxels}</p>
+                <p className="text-gray-400">GPS: {coverage.currentPosition ? '✅' : '⏳'} ±{coverage.gpsAccuracy.toFixed(0)}m</p>
+                <p className="text-gray-400">Steps: {coverage.stepCount} | Voxels: {coverage.paintedVoxels}</p>
                 <p className="text-emerald-400">Coverage: {coverage.coveragePercent.toFixed(1)}%</p>
             </div>
         </div>
