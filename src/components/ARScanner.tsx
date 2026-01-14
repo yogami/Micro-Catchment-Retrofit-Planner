@@ -56,7 +56,7 @@ function DebugDashboard({ scanner }: { scanner: any }) {
 
 function ScannerMain({ scanner }: { scanner: ScannerHook }) {
     return (
-        <main className="pt-16 pb-24">
+        <main className="relative pt-16 pb-24 min-h-screen">
             <ScannerBody scanner={scanner} />
         </main>
     );
@@ -81,7 +81,7 @@ function ScannerBody({ scanner }: { scanner: ScannerHook }) {
             return <MemoOnboardingView scanner={scanner} />;
         case 'planning':
             return (
-                <div className="h-[calc(100vh-8rem)]">
+                <div className="absolute inset-0 top-16 bottom-0 z-0">
                     <MapBoundaryView
                         onBoundaryConfirmed={handleBoundaryConfirmed}
                         onCancel={handleCancelPlanning}

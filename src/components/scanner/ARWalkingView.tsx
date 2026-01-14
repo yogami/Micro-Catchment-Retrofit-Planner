@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { useARScanner } from '../../hooks/useARScanner';
 import { useGPSWalkingCoverage } from '../../hooks/scanner/useGPSWalkingCoverage';
 import { WalkingCoverageOverlay } from './coverage/WalkingCoverageOverlay';
+import { ScannerHUD } from './HUD/ScannerHUD';
 
 type ScannerHook = ReturnType<typeof useARScanner>;
 
@@ -199,28 +200,3 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
     );
 }
 
-/**
- * ScannerHUD - Tactical AR overlay corners and sweep
- */
-function ScannerHUD() {
-    return (
-        <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
-            {/* Corners */}
-            <div className="absolute top-10 left-10 w-8 h-8 border-t-4 border-l-4 border-emerald-500/50 rounded-tl-lg" />
-            <div className="absolute top-10 right-10 w-8 h-8 border-t-4 border-r-4 border-emerald-500/50 rounded-tr-lg" />
-            <div className="absolute bottom-10 left-10 w-8 h-8 border-b-4 border-l-4 border-emerald-500/50 rounded-bl-lg" />
-            <div className="absolute bottom-10 right-10 w-8 h-8 border-b-4 border-r-4 border-emerald-500/50 rounded-br-lg" />
-
-            {/* Scanning Sweep */}
-            <div className="absolute left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent top-0 animate-[scan_4s_linear_infinite]" />
-            <style>{`
-                @keyframes scan {
-                    0% { top: 10%; opacity: 0; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { top: 90%; opacity: 0; }
-                }
-            `}</style>
-        </div>
-    );
-}

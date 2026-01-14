@@ -1,29 +1,16 @@
-/**
- * MapBoundaryView - Satellite map for polygon boundary drawing.
- * 
- * Displays a Mapbox satellite map centered on user's GPS location.
- * Allows drawing a polygon by tapping points on the map.
- * 
- * CC <= 3. Uses composition for complex logic.
- */
-
 import { useRef, useEffect, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { GeoPolygon, type GeoVertex } from '../../../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
 import { useGPSAnchor } from '../../../hooks/scanner/useGPSAnchor';
+import { ScannerHUD } from '../HUD/ScannerHUD';
 
-// Note: In production, load from environment variable
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || '';
 
 export interface MapBoundaryViewProps {
-    /** Minimum vertices required (default: 3) */
     minVertices?: number;
-    /** Maximum vertices allowed (default: 10) */
     maxVertices?: number;
-    /** Callback when polygon is confirmed */
     onBoundaryConfirmed: (polygon: GeoPolygon) => void;
-    /** Callback to cancel and return */
     onCancel?: () => void;
 }
 
@@ -53,7 +40,7 @@ export function MapBoundaryView({
         if (!gps.isReady || !mapContainer.current || map.current) return;
         if (!MAPBOX_TOKEN) {
             console.warn('Mapbox token not configured');
-            setIsMapReady(true); // Still "ready" to show the UI even if the map is empty
+            setIsMapReady(true);
             return;
         }
 
@@ -63,8 +50,9 @@ export function MapBoundaryView({
             container: mapContainer.current,
             style: 'mapbox://styles/mapbox/satellite-streets-v12',
             center: [gps.lon!, gps.lat!],
-            zoom: 18,
-            pitch: 0
+            zoom: 19, // Zoomed in closer for site definition
+            pitch: 0,
+            antialias: true
         });
 
         map.current.on('load', () => setIsMapReady(true));
@@ -88,6 +76,8 @@ export function MapBoundaryView({
             };
 
             setVertices(prev => [...prev, newVertex]);
+            // Haptic feedback on tap
+            if (navigator.vibrate) navigator.vibrate(20);
         };
 
         map.current.on('click', handleClick);
@@ -107,7 +97,11 @@ export function MapBoundaryView({
 
         // Add new markers
         vertices.forEach((v) => {
-            const marker = new mapboxgl.Marker({ color: '#22c55e' })
+            // Using a more tactical emerald dot
+            const el = document.createElement('div');
+            el.className = 'w-4 h-4 bg-emerald-500 rounded-full border-2 border-white shadow-lg shadow-emerald-500/50';
+
+            const marker = new mapboxgl.Marker({ element: el })
                 .setLngLat([v.lon, v.lat])
                 .addTo(map.current!);
             markersRef.current.push(marker);
@@ -142,29 +136,38 @@ export function MapBoundaryView({
     }
 
     return (
-        <div className="relative w-full h-full bg-black overflow-hidden" data-testid="map-boundary-view">
+        <div className="relative w-full h-full bg-slate-950 overflow-hidden" data-testid="map-boundary-view">
+            {/* Camera Floor Layer */}
             <PlanningCameraBackground />
 
-            <div ref={mapContainer} className="absolute inset-0 bg-transparent">
-                {!MAPBOX_TOKEN && (
-                    <div className="absolute inset-0 grid grid-cols-10 grid-rows-10 pointer-events-none opacity-20">
-                        {Array.from({ length: 100 }).map((_, i) => (
-                            <div key={i} className="border border-white/40" />
-                        ))}
-                    </div>
-                )}
-            </div>
+            {/* Tactical Grid / Map Container */}
+            <div ref={mapContainer} className="absolute inset-0 bg-transparent z-10" />
+
+            {/* Mapbox Token Missing Fallback Grid */}
             {!MAPBOX_TOKEN && (
-                <div className="absolute inset-0 flex items-center justify-center p-6 text-center z-10">
-                    <div className="bg-black/60 p-6 rounded-2xl border border-yellow-500/30">
-                        <p className="text-yellow-500 font-bold mb-2">🗺️ Mapbox Token Missing</p>
-                        <p className="text-xs text-gray-400">Please set VITE_MAPBOX_TOKEN in .env.local for satellite view.</p>
-                        <p className="text-[10px] text-gray-500 mt-2">You can still tap the screen to define area nodes.</p>
+                <div className="absolute inset-0 grid grid-cols-10 grid-rows-10 pointer-events-none opacity-20 z-0">
+                    {Array.from({ length: 100 }).map((_, i) => (
+                        <div key={i} className="border border-white/20" />
+                    ))}
+                </div>
+            )}
+
+            {/* Token Missing HUD Alert */}
+            {!MAPBOX_TOKEN && (
+                <div className="absolute top-40 left-6 right-6 z-40 pointer-events-none">
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 backdrop-blur-sm">
+                        <p className="text-amber-400 text-[10px] font-black uppercase tracking-widest text-center leading-relaxed">
+                            📡 Satellite Data Unavailable<br />
+                            <span className="text-[8px] opacity-70">Manual Voxel Grid Active</span>
+                        </p>
                     </div>
                 </div>
             )}
 
-            <MapOverlay
+            {/* Tactical HUD Layers */}
+            <ScannerHUD color="emerald" />
+
+            <MapInstructions
                 vertexCount={vertices.length}
                 minVertices={minVertices}
             />
@@ -178,6 +181,16 @@ export function MapBoundaryView({
                 onConfirm={handleConfirm}
                 onCancel={onCancel}
             />
+
+            {/* Tactical Diagnostics */}
+            <div className="absolute top-40 left-6 z-30 bg-black/40 backdrop-blur-sm p-4 rounded-2xl border border-white/5 text-[9px] font-mono leading-relaxed pointer-events-none">
+                <div className="flex items-center gap-2 mb-1">
+                    <span className="text-gray-500 uppercase font-black">Plan:</span>
+                    <span className="text-emerald-400 font-bold">ACTIVE</span>
+                </div>
+                <p className="text-gray-400 font-bold uppercase">Points: {vertices.length}</p>
+                <p className="text-gray-400 font-bold uppercase">Hull: {canConfirm ? 'COMPLETE' : 'SEGMENTED'}</p>
+            </div>
         </div>
     );
 }
@@ -191,47 +204,59 @@ function GPSWaitingView({ accuracy, error, onSpoof }: {
     onSpoof: (lat: number, lon: number) => void;
 }) {
     return (
-        <div className="flex flex-col items-center justify-center h-full bg-white text-black p-8 text-center" data-testid="gps-waiting-view">
-            <div className="w-20 h-20 border-8 border-emerald-500 border-t-transparent rounded-full animate-spin mb-8" />
-            <h2 className="text-3xl font-black mb-4 uppercase tracking-tighter">Locating Site...</h2>
-            <p className="text-gray-500 text-lg mb-8 font-medium">
-                {error ? error : 'Wait for accuracy or tap "Force Start" below.'}
+        <div className="flex flex-col items-center justify-center h-full bg-slate-950 text-white p-8 text-center" data-testid="gps-waiting-view">
+            <div className="relative w-24 h-24 mb-10">
+                <div className="absolute inset-0 border-4 border-emerald-500/20 rounded-full" />
+                <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-2xl animate-pulse">📡</span>
+                </div>
+            </div>
+
+            <h2 className="text-2xl font-black mb-2 uppercase tracking-tight">Acquiring GIS Fix</h2>
+            <p className="text-slate-500 text-sm mb-12 font-medium max-w-[240px]">
+                {error ? error : 'High-precision coordinate lock required for site planning.'}
             </p>
+
             {accuracy !== null && (
-                <div className="bg-emerald-100 px-6 py-3 rounded-2xl mb-12 border-2 border-emerald-500">
-                    <p className="text-emerald-700 font-mono font-bold text-xl">
-                        Signal: ±{accuracy.toFixed(0)}m
+                <div className="bg-emerald-500/10 px-6 py-4 rounded-3xl mb-12 border border-emerald-500/20">
+                    <p className="text-emerald-400 font-mono font-bold text-lg">
+                        ACCURACY: ±{accuracy.toFixed(1)}M
                     </p>
                 </div>
             )}
+
             <button
                 onClick={() => onSpoof(38.8977, -77.0365)}
-                className="w-full py-8 bg-black text-white rounded-3xl font-black text-2xl shadow-2xl active:scale-95 hover:bg-gray-800 transition-all"
+                className="w-full max-w-xs py-5 bg-emerald-500 text-black rounded-3xl font-black text-sm uppercase tracking-widest shadow-[0_20px_40px_rgba(16,185,129,0.3)] active:scale-95 transition-all"
             >
-                FORCE START ✓
-                <span className="block text-[10px] text-emerald-400 opacity-70 mt-1 uppercase font-black">Bypass GPS for indoor testing</span>
+                Bypass & Force Fix
             </button>
+            <p className="mt-4 text-[9px] text-slate-600 font-bold uppercase tracking-widest">Indoor Simulation Mode</p>
         </div>
     );
 }
 
 /**
- * MapOverlay - Instructions overlay on the map.
+ * MapInstructions - High-visibility instructions overlay.
  */
-function MapOverlay({ vertexCount, minVertices }: {
+function MapInstructions({ vertexCount, minVertices }: {
     vertexCount: number;
     minVertices: number;
 }) {
     const remaining = Math.max(0, minVertices - vertexCount);
     const message = vertexCount === 0
-        ? `Tap ${minVertices} corners to define boundary`
+        ? `Tap ${minVertices} points to define area`
         : remaining > 0
-            ? `Tap ${remaining} more point${remaining > 1 ? 's' : ''}`
-            : `${vertexCount} points • Tap to add more or confirm`;
+            ? `Connect ${remaining} more node${remaining > 1 ? 's' : ''}`
+            : `Geometry Locked • ${vertexCount} nodes`;
 
     return (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur px-4 py-2 rounded-full">
-            <p className="text-white text-sm font-medium">{message}</p>
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-40 w-[85%] max-w-md pointer-events-none">
+            <div className="bg-black/80 backdrop-blur-xl px-6 py-4 rounded-full border border-white/10 shadow-2xl flex items-center justify-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${remaining === 0 ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                <p className="text-white text-[11px] font-black uppercase tracking-[0.15em]">{message}</p>
+            </div>
         </div>
     );
 }
@@ -249,43 +274,43 @@ function MapControls({ canUndo, canClear, canConfirm, onUndo, onClear, onConfirm
     onCancel?: () => void;
 }) {
     return (
-        <div className="absolute bottom-6 left-4 right-4 flex justify-between items-center z-20">
-            <div className="flex gap-2">
-                {onCancel && (
-                    <button
-                        onClick={onCancel}
-                        className="px-4 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium"
-                    >
-                        Cancel
-                    </button>
-                )}
+        <div className="absolute bottom-10 left-6 right-6 flex flex-col gap-4 z-40">
+            {canConfirm && (
+                <button
+                    onClick={onConfirm}
+                    className="w-full py-6 bg-emerald-500 text-black rounded-[2rem] font-black text-lg uppercase tracking-[0.2em] shadow-[0_20px_50px_rgba(16,185,129,0.4)] animate-in zoom-in duration-300"
+                    data-testid="confirm-boundary-button"
+                >
+                    Confirm Boundary ✓
+                </button>
+            )}
+
+            <div className="flex gap-3 h-14">
+                <button
+                    onClick={onCancel}
+                    className="flex-1 bg-white/5 backdrop-blur-md text-white border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                >
+                    Cancel
+                </button>
                 <button
                     onClick={onUndo}
                     disabled={!canUndo}
-                    className="px-4 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                    className="flex-1 bg-white/5 backdrop-blur-md text-white border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest disabled:opacity-20 active:scale-95 transition-all"
                 >
                     Undo
                 </button>
                 <button
                     onClick={onClear}
                     disabled={!canClear}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                    className="flex-1 bg-red-500/10 backdrop-blur-md text-red-500 border border-red-500/20 rounded-2xl text-[10px] font-black uppercase tracking-widest disabled:opacity-20 active:scale-95 transition-all"
                 >
                     Clear
                 </button>
             </div>
-
-            <button
-                onClick={onConfirm}
-                disabled={!canConfirm}
-                className="px-6 py-3 bg-emerald-500 text-white rounded-xl font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                data-testid="confirm-boundary-button"
-            >
-                Confirm Boundary ✓
-            </button>
         </div>
     );
 }
+
 
 /**
  * Update the polygon layer on the map.
