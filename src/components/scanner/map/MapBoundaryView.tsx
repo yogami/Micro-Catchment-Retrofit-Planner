@@ -157,7 +157,7 @@ export function MapBoundaryView({
     }
 
     return (
-        <div className="relative w-full h-full bg-slate-950 overflow-hidden" data-testid="map-boundary-view">
+        <div className="relative w-full h-full bg-black overflow-hidden" data-testid="map-boundary-view">
             {/* Camera Floor Layer */}
             <PlanningCameraBackground />
 
@@ -425,7 +425,7 @@ function PlanningCameraBackground() {
             autoPlay
             playsInline
             muted
-            className="absolute inset-0 w-full h-full object-cover opacity-30 brightness-50 grayscale"
+            className="absolute inset-0 w-full h-full object-cover"
         />
     );
 }
