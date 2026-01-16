@@ -33,7 +33,7 @@ function DebugDashboard({ scanner }: { scanner: any }) {
     if (scanner.scanPhase === 'scanning' && !scanner.isLocked) return null;
 
     return (
-        <div className="fixed top-20 left-4 z-[100] bg-black/80 backdrop-blur p-3 rounded-2xl border border-white/10 font-mono text-[9px] pointer-events-none shadow-2xl">
+        <div className="fixed bottom-20 right-4 z-[100] bg-black/80 backdrop-blur p-3 rounded-2xl border border-white/10 font-mono text-[9px] pointer-events-none shadow-2xl">
             <p className="text-gray-500 mb-2 font-black uppercase tracking-tighter flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Live Diagnostics
