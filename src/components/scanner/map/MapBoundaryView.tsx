@@ -214,14 +214,10 @@ export function MapBoundaryView({
                 onCancel={onCancel}
             />
 
-            {/* Tactical Diagnostics */}
-            <div className="absolute top-40 left-6 z-30 bg-black/40 backdrop-blur-sm p-4 rounded-2xl border border-white/5 text-[9px] font-mono leading-relaxed pointer-events-none">
-                <div className="flex items-center gap-2 mb-1">
-                    <span className="text-gray-500 uppercase font-black">Plan:</span>
-                    <span className="text-emerald-400 font-bold">ACTIVE</span>
-                </div>
-                <p className="text-gray-400 font-bold uppercase">Points: {vertices.length}</p>
-                <p className="text-gray-400 font-bold uppercase">Hull: {canConfirm ? 'COMPLETE' : 'SEGMENTED'}</p>
+            {/* Tactical Diagnostics - Bottom Right */}
+            <div className="absolute bottom-32 right-6 z-30 bg-black/60 backdrop-blur-sm p-3 rounded-xl border border-white/10 text-[9px] font-mono pointer-events-none">
+                <p className="text-emerald-400 font-bold">📍 {vertices.length} / {minVertices} Points</p>
+                <p className="text-gray-500">{canConfirm ? '✓ Ready to confirm' : 'Tap map to add'}</p>
             </div>
         </div>
     );

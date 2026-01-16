@@ -64,10 +64,14 @@ function ScannerMain({ scanner }: { scanner: ScannerHook }) {
 
 function ScannerBody({ scanner }: { scanner: ScannerHook }) {
     const handleBoundaryConfirmed = useCallback((polygon: GeoPolygon) => {
+        // Skip walking phase - go directly to analysis
         scanner.update({
             geoBoundary: polygon,
+            detectedArea: polygon.areaSquareMeters,
             scanPhase: 'scanning',
-            isScanning: true
+            isScanning: false,
+            isLocked: true, // Immediately show analysis
+            scanProgress: 100 // Mark as complete
         });
     }, [scanner]);
 
