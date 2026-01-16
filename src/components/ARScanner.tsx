@@ -64,14 +64,14 @@ function ScannerMain({ scanner }: { scanner: ScannerHook }) {
 
 function ScannerBody({ scanner }: { scanner: ScannerHook }) {
     const handleBoundaryConfirmed = useCallback((polygon: GeoPolygon) => {
-        // Skip walking phase - go directly to analysis
+        // Start AR coverage scanning phase (two-screen workflow)
         scanner.update({
             geoBoundary: polygon,
             detectedArea: polygon.areaSquareMeters,
             scanPhase: 'scanning',
-            isScanning: false,
-            isLocked: true, // Immediately show analysis
-            scanProgress: 100 // Mark as complete
+            isScanning: true, // Start coverage tracking
+            isLocked: false,  // Show AR walking view, not analysis
+            scanProgress: 0   // Start fresh
         });
     }, [scanner]);
 

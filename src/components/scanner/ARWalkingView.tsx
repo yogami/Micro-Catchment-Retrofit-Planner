@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useARScanner } from '../../hooks/useARScanner';
 import { useGPSWalkingCoverage } from '../../hooks/scanner/useGPSWalkingCoverage';
+import { useGroundDetection } from '../../hooks/scanner/useGroundDetection';
 import { WalkingCoverageOverlay } from './coverage/WalkingCoverageOverlay';
 import { ScannerHUD } from './HUD/ScannerHUD';
 
@@ -11,6 +12,7 @@ type ScannerHook = ReturnType<typeof useARScanner>;
  * 
  * Features:
  * - GPS + IMU fusion for accurate tracking
+ * - Ground detection (camera pitch validation)
  * - Heatmap visualization
  * - Haptic feedback on boundary cross
  * - Completion audio at 95%+
@@ -26,6 +28,9 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
 
     // GPS Walking Coverage with IMU fusion
     const coverage = useGPSWalkingCoverage(scanner.geoBoundary, scanner.isScanning);
+
+    // Ground detection - validates camera is pointing at ground
+    const groundDetection = useGroundDetection();
 
     // Sync coverage data to scanner state
     useEffect(() => {
@@ -104,7 +109,7 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
     }, [scanner]);
 
     return (
-        <div className="fixed inset-0 bg-black z-0 overflow-hidden">
+        <div className="fixed inset-0 bg-black z-0 overflow-hidden" data-testid="ar-coverage-view">
             {/* Camera Background (Visual Only) */}
             <video
                 ref={videoRef}
@@ -147,16 +152,23 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
                 </div>
             )}
 
-            {/* Smart Instructions */}
+            {/* Smart Instructions with Ground Detection */}
             <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 w-[85%] max-w-md">
                 <div className="bg-black/40 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 shadow-2xl flex items-center gap-4">
-                    <div className={`w-3 h-3 rounded-full ${coverage.isInsideBoundary ? 'bg-emerald-500 animate-pulse' : 'bg-red-500 animate-ping'}`} />
+                    <div className={`w-3 h-3 rounded-full ${!groundDetection.isPointingAtGround
+                        ? 'bg-amber-500 animate-ping'
+                        : coverage.isInsideBoundary
+                            ? 'bg-emerald-500 animate-pulse'
+                            : 'bg-red-500 animate-ping'
+                        }`} />
                     <p className="text-white text-xs font-bold uppercase tracking-widest leading-tight">
-                        {coverage.coveragePercent >= 95
-                            ? '🎯 Target Reached! Review results'
-                            : coverage.isInsideBoundary
-                                ? 'Recording Coverage... Keep Walking'
-                                : 'Boundary Warning: Re-enter Zone'}
+                        {!groundDetection.isPointingAtGround
+                            ? '📷 Point camera at ground'
+                            : coverage.coveragePercent >= 95
+                                ? '🎯 Target Reached! Review results'
+                                : coverage.isInsideBoundary
+                                    ? 'Recording Coverage... Keep Walking'
+                                    : '⚠️ Outside Boundary - Return to zone'}
                     </p>
                 </div>
             </div>
