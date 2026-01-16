@@ -99,8 +99,8 @@ test.describe('Two-Screen Workflow', () => {
         await navigateToMapScreen(page);
         await drawPolygon(page);
 
-        // Should show area estimation
-        await expect(page.getByText(/4 \/ 4 Points/i)).toBeVisible({ timeout: 5000 });
+        // Should show nodes count in diagnostics
+        await expect(page.getByText(/4 \/ 4 Nodes/i)).toBeVisible({ timeout: 5000 });
     });
 
     test('Screen 1: Next button appears when polygon valid', async ({ page }) => {

@@ -45,14 +45,24 @@ export function WalkingCoverageOverlay({
         const rangeX = (bounds.maxLon - bounds.minLon) * 111320 * Math.cos(origin.lat * Math.PI / 180);
         const rangeY = (bounds.maxLat - bounds.minLat) * 111320;
         const padding = 0.25;
-        const scale = size / Math.max(rangeX, rangeY) * (1 - padding);
+        const maxRange = Math.max(rangeX, rangeY);
+
+        // Guard against division by zero for degenerate polygons
+        const scale = maxRange > 0.0001
+            ? (size / maxRange) * (1 - padding)
+            : 1;
+
         const offsetX = size / 2;
         const offsetY = size / 2;
 
-        const project = (lat: number, lon: number) => ({
-            x: (lon - origin.lon) * 111320 * Math.cos(origin.lat * Math.PI / 180) * scale + offsetX,
-            y: -(lat - origin.lat) * 111320 * scale + offsetY
-        });
+        const project = (lat: number, lon: number) => {
+            const dx = (lon - origin.lon) * 111320 * Math.cos(origin.lat * Math.PI / 180);
+            const dy = (lat - origin.lat) * 111320;
+            return {
+                x: dx * scale + offsetX,
+                y: -dy * scale + offsetY
+            };
+        };
 
         // Clear with tactical dark background
         ctx.fillStyle = '#0f172a'; // Slate-900

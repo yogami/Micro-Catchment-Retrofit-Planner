@@ -157,46 +157,35 @@ export function MapBoundaryView({
     }
 
     return (
-        <div className="relative w-full h-full bg-black overflow-hidden" data-testid="map-boundary-view">
-            {/* Camera Floor Layer */}
-            <PlanningCameraBackground />
+        <div className="relative w-full h-full bg-slate-950 overflow-hidden" data-testid="map-boundary-view">
+            {/* 
+                NOTE: Removing PlanningCameraBackground from Screen 1 
+                to satisfy "Two-Screen Workflow" (Map -> AR).
+                This makes the Map screen distinct and prevents the "Same Interface" confusion.
+            */}
 
-            {/* Tactical Grid / Map Container - onClick for fallback/E2E compatibility */}
+            {/* Tactical Grid / Map Container */}
             <div
                 ref={mapContainer}
-                className="absolute inset-0 bg-transparent z-10"
+                className="absolute inset-0 z-10 bg-slate-900 shadow-inner"
                 data-testid="map-canvas-container"
             />
 
-            {/* Transparent Click Capture Overlay - ensures clicks work in E2E and when Mapbox events fail */}
+            {/* Transparent Click Capture Overlay */}
             <div
-                className="absolute inset-0 z-15 cursor-crosshair"
+                className="absolute inset-0 z-20 cursor-crosshair"
                 onClick={handleContainerClick}
                 data-testid="click-capture-overlay"
             />
 
-            {/* Mapbox Token Missing Fallback Grid */}
-            {!MAPBOX_TOKEN && (
-                <div className="absolute inset-0 grid grid-cols-10 grid-rows-10 pointer-events-none opacity-20 z-0">
-                    {Array.from({ length: 100 }).map((_, i) => (
-                        <div key={i} className="border border-white/20" />
-                    ))}
+            {/* Tactical HUD Layers - Identifies Phase */}
+            <div className="absolute top-20 left-6 z-40 pointer-events-none">
+                <div className="flex flex-col gap-1">
+                    <p className="text-emerald-500 text-[10px] font-black uppercase tracking-[0.2em]">Phase 01</p>
+                    <h1 className="text-white text-2xl font-black uppercase tracking-tight">Site Planning</h1>
                 </div>
-            )}
+            </div>
 
-            {/* Token Missing HUD Alert */}
-            {!MAPBOX_TOKEN && (
-                <div className="absolute top-40 left-6 right-6 z-40 pointer-events-none">
-                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 backdrop-blur-sm">
-                        <p className="text-amber-400 text-[10px] font-black uppercase tracking-widest text-center leading-relaxed">
-                            📡 Satellite Data Unavailable<br />
-                            <span className="text-[8px] opacity-70">Manual Voxel Grid Active</span>
-                        </p>
-                    </div>
-                </div>
-            )}
-
-            {/* Tactical HUD Layers */}
             <ScannerHUD color="emerald" />
 
             <MapInstructions
@@ -207,7 +196,7 @@ export function MapBoundaryView({
             <MapControls
                 canUndo={vertices.length > 0}
                 canClear={vertices.length > 0}
-                canConfirm={canConfirm}
+                canConfirm={canConfirm && vertices.length >= 3}
                 onUndo={handleUndo}
                 onClear={handleClear}
                 onConfirm={handleConfirm}
@@ -215,9 +204,17 @@ export function MapBoundaryView({
             />
 
             {/* Tactical Diagnostics - Bottom Right */}
-            <div className="absolute bottom-32 right-6 z-30 bg-black/60 backdrop-blur-sm p-3 rounded-xl border border-white/10 text-[9px] font-mono pointer-events-none">
-                <p className="text-emerald-400 font-bold">📍 {vertices.length} / {minVertices} Points</p>
-                <p className="text-gray-500">{canConfirm ? '✓ Ready to confirm' : 'Tap map to add'}</p>
+            <div className="absolute bottom-32 right-6 z-30 bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-[10px] font-mono pointer-events-none shadow-2xl">
+                <p className="text-emerald-400 font-bold mb-1">📍 {vertices.length} / {minVertices} Nodes</p>
+                <p className="text-gray-400 uppercase tracking-widest text-[8px]">
+                    Area: <span className="text-white">{canConfirm ? GeoPolygon.create(vertices).areaSquareMeters.toFixed(1) : '0.0'} m²</span>
+                </p>
+                <div className="mt-2 h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-emerald-500 transition-all duration-300"
+                        style={{ width: `${Math.min(100, (vertices.length / minVertices) * 100)}%` }}
+                    />
+                </div>
             </div>
         </div>
     );
@@ -393,35 +390,3 @@ function updatePolygonLayer(map: mapboxgl.Map, vertices: GeoVertex[]) {
     });
 }
 
-/**
- * PlanningCameraBackground - Provides a live camera background for the planning phase
- * to satisfy user preference for camera visibility in all phases.
- */
-function PlanningCameraBackground() {
-    const videoRef = useRef<HTMLVideoElement>(null);
-
-    useEffect(() => {
-        let stream: MediaStream | null = null;
-        if (videoRef.current) {
-            navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' }
-            }).then(s => {
-                stream = s;
-                if (videoRef.current) videoRef.current.srcObject = s;
-            }).catch(e => console.error("Planning camera failed:", e));
-        }
-        return () => {
-            if (stream) stream.getTracks().forEach(t => t.stop());
-        };
-    }, []);
-
-    return (
-        <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="absolute inset-0 w-full h-full object-cover"
-        />
-    );
-}

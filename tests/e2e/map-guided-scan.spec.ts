@@ -241,8 +241,8 @@ test.describe('Map-Guided AR Scan Workflow', () => {
             await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.7);
             await page.waitForTimeout(200);
 
-            // Should show point count in diagnostics (new format)
-            await expect(page.getByText(/4 \/ 4 Points/i)).toBeVisible({ timeout: 5000 });
+            // Should show nodes count in diagnostics
+            await expect(page.getByText(/4 \/ 4 Nodes/i)).toBeVisible({ timeout: 5000 });
         }
     });
 
@@ -307,8 +307,15 @@ test.describe('Map-Guided AR Scan Workflow', () => {
             await expect(confirmBtn).toBeVisible({ timeout: 5000 });
             await confirmBtn.click();
 
-            // Should transition to analysis phase (skipping walking)
-            // Look for analysis panel headings
+            // Should transition to AR scanning phase (two-screen workflow)
+            await expect(page.getByTestId('ar-coverage-view')).toBeVisible({ timeout: 10000 });
+
+            // Complete scanning (click stop/complete button)
+            const stopBtn = page.getByTestId('stop-scanning-button');
+            await expect(stopBtn).toBeVisible({ timeout: 5000 });
+            await stopBtn.click();
+
+            // Should transition to analysis phase
             await expect(
                 page.getByRole('heading', { name: /Hydrology Mitigation Strategy/i })
             ).toBeVisible({ timeout: 10000 });
@@ -339,8 +346,9 @@ test.describe('Map-Guided AR Scan Workflow', () => {
                 await page.waitForTimeout(200);
             }
 
-            // Should show ready status (new format)
-            await expect(page.getByText(/Ready to confirm/i)).toBeVisible({ timeout: 5000 });
+            // Should show area calculation and node count in diagnostics
+            await expect(page.getByText(/Area:/i)).toBeVisible({ timeout: 5000 });
+            await expect(page.getByText(/node/i).first()).toBeVisible({ timeout: 5000 });
         }
     });
 });
