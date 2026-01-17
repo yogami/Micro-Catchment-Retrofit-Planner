@@ -148,6 +148,20 @@ export function MapBoundaryView({
             hasInitRef.current = false;
         };
     }, []);
+    // STEP 2: RESIZE OBSERVER
+    useEffect(() => {
+        if (!mapContainer.current || !map.current) return;
+
+        const resizeObserver = new ResizeObserver(() => {
+            if (map.current) {
+                map.current.resize();
+            }
+        });
+
+        resizeObserver.observe(mapContainer.current);
+
+        return () => resizeObserver.disconnect();
+    }, [isMapReady]); // Re-attach if map ready state changes, just in case
 
     // FOLLOW GPS ONLY IF NO NODES PLACED
     useEffect(() => {
@@ -228,8 +242,15 @@ export function MapBoundaryView({
             />
 
             {/* 
+                ALWAYS ON GRID OVERLAY 
+                For spatial context even if map is loading or dark.
+            */}
+            <div className="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px pointer-events-none z-15 opacity-20">
+                {Array.from({ length: 144 }).map((_, i) => <div key={i} className="border-[0.5px] border-emerald-500/30" />)}
+            </div>
+
+            {/* 
                 Fallback Overlay (Sibling to Map)
-                FIX: Removed solid background so we can see the map loading underneath 
             */}
             {showFallback && (
                 <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
@@ -238,13 +259,12 @@ export function MapBoundaryView({
                         isReady={isMapReady}
                         hasToken={!!MAPBOX_TOKEN}
                         errorMessage={rawMapError}
-                        onOverride={() => setMapInitError(true)}
                         onRetry={handleRetry}
                     />
                 </div>
             )}
 
-            {/* Click Capture Overlay - Higher z-index than fallback to ensure interaction */}
+            {/* Click Capture Overlay */}
             <div
                 className="absolute inset-0 z-30 cursor-crosshair"
                 onClick={handleContainerClick}
