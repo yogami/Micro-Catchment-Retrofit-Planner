@@ -116,7 +116,8 @@ export function MapBoundaryView({
                     const status = (err as any)?.status;
                     if (status === 403 || message.includes('Forbidden') || message.includes('Unauthorized')) {
                         const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 8)}...` : 'MISSING';
-                        message = `AUTH_FAILURE: Check Domain/Token. \nToken: ${tokenSnippet}`;
+                        const currentHost = window.location.host;
+                        message = `AUTH_FAILURE (403): Mapbox is rejecting this domain.\n[TOKEN]: ${tokenSnippet}\n[DOMAIN]: ${currentHost}\n[FIX]: Whitelist this domain in Mapbox Console.`;
                     }
 
                     setRawMapError(message);
