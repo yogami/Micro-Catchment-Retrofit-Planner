@@ -113,10 +113,18 @@ export function MapBoundaryView({
 
         vertices.forEach((v) => {
             const el = document.createElement('div');
-            el.className = `w-4 h-4 rounded-full border-2 border-white shadow-lg transition-all duration-300 ${isTooFar ? 'bg-amber-500 scale-125' : 'bg-emerald-500'
+            el.className = `w-3 h-3 rounded-full border border-white/80 shadow-2xl transition-all duration-300 flex items-center justify-center ${isTooFar ? 'bg-amber-500 scale-125' : 'bg-emerald-500'
                 }`;
 
-            const marker = new mapboxgl.Marker({ element: el })
+            // Inner Core for pixel-perfect placement
+            const core = document.createElement('div');
+            core.className = 'w-1 h-1 bg-white rounded-full';
+            el.appendChild(core);
+
+            const marker = new mapboxgl.Marker({
+                element: el,
+                anchor: 'center'
+            })
                 .setLngLat([v.lon, v.lat])
                 .addTo(map.current!);
             markersRef.current.push(marker);
