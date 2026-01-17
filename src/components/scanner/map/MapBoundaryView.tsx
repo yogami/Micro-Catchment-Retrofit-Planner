@@ -20,6 +20,11 @@ export interface MapBoundaryViewProps {
     onCancel?: () => void;
 }
 
+// Set token globally as early as possible
+if (MAPBOX_TOKEN) {
+    mapboxgl.accessToken = MAPBOX_TOKEN;
+}
+
 /**
  * MapBoundaryView - Main component for map-based boundary drawing.
  */
@@ -61,47 +66,102 @@ export function MapBoundaryView({
     useEffect(() => {
         if (!gps.lat || !gps.lon || !mapContainer.current || hasInitRef.current) return;
 
+        // 1. Check for WebGL support
+        if (!mapboxgl.supported()) {
+            setMapInitError(true);
+            setRawMapError("WebGL not supported or hardware acceleration disabled.");
+            return;
+        }
+
         hasInitRef.current = true;
 
-        try {
-            mapboxgl.accessToken = MAPBOX_TOKEN;
-            const m = new mapboxgl.Map({
-                container: mapContainer.current,
-                style: 'mapbox://styles/mapbox/satellite-streets-v12',
-                center: [gps.lon, gps.lat],
-                zoom: 19.5,
-                pitch: 0,
-                antialias: true,
-                maxZoom: 22,
-                minZoom: 12,
-                trackResize: true
-            });
+        // Add a micro-delay to ensure container ref is settled in DOM
+        const timer = setTimeout(() => {
+            if (!mapContainer.current) return;
 
-            m.on('style.load', () => {
-                // Ensure no flickering by only flagging ready after style is in place
-                setIsMapReady(true);
-            });
+            // Validate container size
+            const { width, height } = mapContainer.current.getBoundingClientRect();
+            if (width === 0 || height === 0) {
+                console.error('Map container has 0 dimensions:', width, height);
+                setRawMapError(`Container size error: ${width}x${height}`);
+                hasInitRef.current = false; // Allow retry
+                return;
+            }
 
-            m.on('load', () => {
-                setIsMapReady(true);
-                m.resize(); // Force layout check
-            });
+            try {
+                const m = new mapboxgl.Map({
+                    container: mapContainer.current,
+                    style: 'mapbox://styles/mapbox/satellite-streets-v12',
+                    center: [gps.lon!, gps.lat!],
+                    zoom: 19.5,
+                    pitch: 0,
+                    antialias: true,
+                    maxZoom: 22,
+                    minZoom: 12,
+                    trackResize: true,
+                    failIfMajorPerformanceCaveat: false,
+                    preserveDrawingBuffer: true,
+                    attributionControl: false
+                });
 
-            m.on('error', (e) => {
-                console.error('Mapbox error:', e);
-                const status = (e.error as any)?.status;
-                const message = (e.error as any)?.message || 'Unknown Mapbox Error';
-                setRawMapError(message);
-                if (status && status !== 404) setMapInitError(true);
-            });
+                m.on('style.load', () => {
+                    console.log('Map style loaded successfully');
+                    setIsMapReady(true);
+                });
 
-            map.current = m;
-        } catch (err) {
-            console.error('Mapbox fatal init failed:', err);
-            setMapInitError(true);
-            setRawMapError(err instanceof Error ? err.message : 'Fatal Init');
-        }
+                m.on('load', () => {
+                    console.log('Map fully loaded');
+                    setIsMapReady(true);
+                    m.resize();
+                });
+
+                m.on('error', (e) => {
+                    console.error('Mapbox error event:', e);
+                    const err = e.error || e;
+
+                    let message = typeof err === 'string' ? err :
+                        err.message ? err.message :
+                            JSON.stringify(err);
+
+                    // Specific hints for Mapbox issues
+                    const status = (err as any)?.status;
+                    if (status === 403 || message.includes('Forbidden') || message.includes('Unauthorized') || message.includes('Unknown')) {
+                        const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 8)}... (len: ${MAPBOX_TOKEN.length})` : 'MISSING';
+                        message = `MAPBOX_AUTH_FAILURE: Token issues detected. \nToken: ${tokenSnippet}\nErr: ${message}`;
+                    }
+
+                    setRawMapError(message);
+
+                    // Only show critical error UI for token/auth issues, WebGL loss, or missing style
+                    if (status === 401 || status === 403 || message.toLowerCase().includes('webgl') || message.includes('Unauthorized') || message.includes('AUTH')) {
+                        setMapInitError(true);
+                    }
+                });
+
+                m.on('webglcontextlost', () => {
+                    setMapInitError(true);
+                    setRawMapError("WebGL Context Lost. Device memory pressure?");
+                });
+
+                map.current = m;
+            } catch (err) {
+                console.error('Mapbox constructor failure:', err);
+                setMapInitError(true);
+                const msg = err instanceof Error ? err.message : 'Constructor Failed';
+                setRawMapError(`FATAL_CONSTRUCTOR: ${msg}`);
+            }
+        }, 1000); // Increased delay for stability
+
+        return () => clearTimeout(timer);
     }, [gps.lat, gps.lon]);
+
+    const handleRetry = useCallback(() => {
+        setMapInitError(false);
+        setRawMapError(null);
+        setIsMapReady(false);
+        hasInitRef.current = false;
+        // The effect will re-run automatically due to hasInitRef being reset
+    }, []);
 
     // Cleanup ONLY on unmount
     useEffect(() => {
@@ -204,6 +264,7 @@ export function MapBoundaryView({
                         hasToken={!!MAPBOX_TOKEN}
                         errorMessage={rawMapError}
                         onOverride={() => setMapInitError(true)}
+                        onRetry={handleRetry}
                     />
                 </div>
             )}
@@ -277,7 +338,7 @@ export function MapBoundaryView({
                     <div className="flex justify-between gap-4">
                         <span className="text-gray-500 uppercase">Signal</span>
                         <span className={`font-black ${(gps.accuracy || 100) < 5 ? 'text-emerald-500' :
-                                (gps.accuracy || 100) < 12 ? 'text-cyan-400' : 'text-amber-500'
+                            (gps.accuracy || 100) < 12 ? 'text-cyan-400' : 'text-amber-500'
                             }`}>
                             ±{(gps.accuracy || 0).toFixed(1)}m
                         </span>
@@ -296,12 +357,13 @@ export function MapBoundaryView({
     );
 }
 
-function FallbackUI({ isError, isReady, hasToken, errorMessage, onOverride }: {
+function FallbackUI({ isError, isReady, hasToken, errorMessage, onOverride, onRetry }: {
     isError: boolean;
     isReady: boolean;
     hasToken: boolean;
     errorMessage: string | null;
-    onOverride: () => void
+    onOverride: () => void;
+    onRetry: () => void;
 }) {
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -317,7 +379,7 @@ function FallbackUI({ isError, isReady, hasToken, errorMessage, onOverride }: {
             <div className="absolute top-10 left-0 right-0 h-1 bg-gradient-to-b from-emerald-500/30 to-transparent animate-[scan_8s_linear_infinite]" />
 
             <div className="absolute inset-0 flex items-center justify-center">
-                <div className="border border-emerald-500/20 bg-black/80 backdrop-blur-xl px-10 py-8 rounded-[2.5rem] text-center max-w-xs animate-in fade-in zoom-in duration-700">
+                <div className="border border-emerald-500/20 bg-black/80 backdrop-blur-xl px-10 py-8 rounded-[2.5rem] text-center max-w-xs animate-in fade-in zoom-in duration-700 pointer-events-auto">
                     {!hasToken ? (
                         <>
                             <p className="text-red-500 text-3xl mb-4">🔑</p>
@@ -329,10 +391,15 @@ function FallbackUI({ isError, isReady, hasToken, errorMessage, onOverride }: {
                         <>
                             <p className="text-amber-500 text-3xl mb-4">⚠️</p>
                             <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Satellite Link Interrupted</p>
-                            <p className="text-amber-500/50 text-[9px] font-bold uppercase tracking-widest leading-relaxed mb-4">
-                                {errorMessage || 'Connection failed or WebGL blocked.'}
-                            </p>
-                            <button onClick={onOverride} className="text-[8px] text-emerald-400 font-black border border-emerald-500/30 px-4 py-2 rounded-full hover:bg-emerald-500/10 transition-colors pointer-events-auto">PLAN BLIND (GPS ONLY)</button>
+                            <div className="bg-black/50 p-3 rounded-xl border border-white/5 mb-6 max-h-20 overflow-y-auto">
+                                <p className="text-amber-500/80 text-[10px] font-mono leading-relaxed">
+                                    {errorMessage || 'Unknown engine failure.'}
+                                </p>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <button onClick={onRetry} className="w-full py-3 bg-emerald-500 text-black text-[9px] font-black uppercase tracking-widest rounded-xl hover:scale-105 active:scale-95 transition-all">RETRY CONNECTION</button>
+                                <button onClick={onOverride} className="w-full py-3 text-white/40 text-[8px] font-bold uppercase tracking-widest hover:text-white transition-colors">PLAN BLIND (GPS ONLY)</button>
+                            </div>
                         </>
                     ) : isReady ? (
                         <>

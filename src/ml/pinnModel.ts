@@ -28,7 +28,7 @@ async function initializeCpuFallback(error: any): Promise<void> {
     }
 }
 
-initializeTf();
+// initializeTf();
 
 // ============ Types ============
 
