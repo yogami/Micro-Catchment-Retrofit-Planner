@@ -239,20 +239,23 @@ export function MapBoundaryView({
         <div className="relative w-full h-full bg-[#020617] overflow-hidden" data-testid="map-boundary-view">
             {/* 
                 CRITICAL FIX: Isolated Map Container 
-                React MUST NOT manage any children of the mapContainer.
+                Wrapped in an absolute div to prevent Mapbox from collapsing the layout 
+                when it injects its own relative positioning.
             */}
-            <div
-                ref={mapContainer}
-                className="absolute inset-0 z-10"
-                data-testid="map-canvas-container"
-            />
+            <div className="absolute inset-0 z-10">
+                <div
+                    ref={mapContainer}
+                    className="w-full h-full"
+                    data-testid="map-canvas-container"
+                />
+            </div>
 
             {/* 
                 ALWAYS ON GRID OVERLAY 
-                For spatial context even if map is loading or dark.
+                Increased visibility and thicker lines to ensure it is unmistakable.
             */}
-            <div className="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px pointer-events-none z-20 opacity-20">
-                {Array.from({ length: 144 }).map((_, i) => <div key={i} className="border-[0.5px] border-emerald-500/30" />)}
+            <div className="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px pointer-events-none z-20 opacity-40">
+                {Array.from({ length: 144 }).map((_, i) => <div key={i} className="border-[1px] border-emerald-500/40" />)}
             </div>
 
             {/* 
