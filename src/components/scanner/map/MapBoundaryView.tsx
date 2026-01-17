@@ -72,11 +72,14 @@ export function MapBoundaryView({
             return;
         }
 
+        // HEAVY SYNC: Ensure token is set everywhere
+        mapboxgl.accessToken = MAPBOX_TOKEN;
+
         const watchdog = setTimeout(() => {
             if (!isMapReady && !mapInitError) {
-                console.warn('Mapbox load watchdog triggered.');
+                console.warn('[MAP_ENGINE] Watchdog: Long load detected');
             }
-        }, 12000);
+        }, 15000);
 
         const timer = setTimeout(() => {
             if (!mapContainer.current || hasInitRef.current) return;
@@ -85,28 +88,36 @@ export function MapBoundaryView({
             try {
                 const initLat = gps.lat!;
                 const initLon = gps.lon!;
-                console.log(`[MAP_ENGINE] Starting init at ${initLat}, ${initLon}`);
+                console.log(`[MAP_ENGINE] Launching with Origin: ${window.location.origin}`);
 
                 const m = new mapboxgl.Map({
                     container: mapContainer.current,
-                    accessToken: MAPBOX_TOKEN, // PASS DIRECTLY
-                    style: 'mapbox://styles/mapbox/satellite-v9',
+                    accessToken: MAPBOX_TOKEN,
+                    style: `mapbox://styles/mapbox/satellite-v9?cachebust=${Date.now()}`,
                     center: [initLon, initLat],
                     zoom: 19.5,
                     pitch: 0,
                     antialias: true,
                     trackResize: true,
-                    attributionControl: false
+                    attributionControl: false,
+                    // INTERCEPTOR: Log exactly what's being sent
+                    transformRequest: (url, resourceType) => {
+                        if (resourceType === 'Style' || resourceType === 'Source' || resourceType === 'Tile') {
+                            console.log(`[MAP_NETWORK] ${resourceType}: ${url.substring(0, 100)}...`);
+                        }
+                        return { url };
+                    }
                 });
 
                 const markReady = () => {
                     if (!isMapReady) {
-                        console.log('[MAP_ENGINE] READY signal received');
+                        console.log('[MAP_ENGINE] Status: READY');
                         setIsMapReady(true);
                     }
                 };
 
                 m.on('style.load', markReady);
+                m.on('styledata', markReady);
                 m.on('render', () => { if (!isMapReady) markReady(); });
 
                 m.on('load', () => {
@@ -115,15 +126,15 @@ export function MapBoundaryView({
                 });
 
                 m.on('error', (e) => {
-                    console.error('[MAP_ENGINE] Error:', e);
+                    console.error('[MAP_ENGINE] Fatal Event:', e);
                     const err = e.error || e;
                     let message = typeof err === 'string' ? err : err.message || JSON.stringify(err);
 
                     const status = (err as any)?.status;
-                    if (status === 403 || message.includes('Forbidden') || message.includes('Unauthorized') || status === 401) {
-                        const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 10)}...${MAPBOX_TOKEN.substring(MAPBOX_TOKEN.length - 5)}` : 'MISSING';
+                    if (status === 403 || status === 401 || message.includes('Forbidden') || message.includes('Unauthorized')) {
+                        const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 10)}...${MAPBOX_TOKEN.substring(MAPBOX_TOKEN.length - 8)}` : 'MISSING';
                         const currentOrigin = window.location.origin;
-                        message = `AUTH_REJECTED (403/401)\nORIGIN: ${currentOrigin}\nTOKEN: ${tokenSnippet}\n\nACTION: Confirm this token is active and allow-lists ${currentOrigin} in Mapbox Dashboard.`;
+                        message = `AUTH_REJECTED (403)\nORIGIN: ${currentOrigin}\nTOKEN: ${tokenSnippet}\n\nACTION: Confirm this token has NO RESTRICTIONS in Mapbox Dashboard or allow-lists ${currentOrigin}.`;
                         setMapInitError(true);
                     }
 
@@ -132,17 +143,17 @@ export function MapBoundaryView({
 
                 map.current = m;
             } catch (err) {
-                console.error('[MAP_ENGINE] Constructor Fatal:', err);
+                console.error('[MAP_ENGINE] Constructor Crash:', err);
                 setMapInitError(true);
                 setRawMapError(err instanceof Error ? err.message : 'Constructor Failed');
             }
-        }, 100);
+        }, 150);
 
         return () => {
             clearTimeout(timer);
             clearTimeout(watchdog);
         };
-    }, [gps.lat, gps.lon]);
+    }, [gps.lat, gps.lon, isMapReady, mapInitError]);
 
     const handleRetry = useCallback(() => {
         setMapInitError(false);
