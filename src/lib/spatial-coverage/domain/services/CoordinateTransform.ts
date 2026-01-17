@@ -75,6 +75,9 @@ export const CoordinateTransform = {
 
         const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
 
-        return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
+        // Clamp to [0, 1] to prevent NaN from floating point precision
+        const clampedSqrtH = Math.sqrt(Math.max(0, Math.min(1, h)));
+
+        return 2 * EARTH_RADIUS_M * Math.asin(clampedSqrtH);
     }
 };

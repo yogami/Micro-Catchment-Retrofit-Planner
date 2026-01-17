@@ -251,7 +251,7 @@ test.describe('Map-Guided AR Scan Workflow', () => {
             await page.waitForTimeout(200);
 
             // Should show nodes count in diagnostics
-            await expect(page.getByText(/4 NODES/i)).toBeVisible({ timeout: 5000 });
+            await expect(page.getByTestId("node-count")).toHaveText("4", { timeout: 5000 });
         }
     });
 
@@ -280,10 +280,16 @@ test.describe('Map-Guided AR Scan Workflow', () => {
             await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.7);
             await page.waitForTimeout(200);
 
+            // Should show nodes count in diagnostics
+            await expect(page.getByTestId("node-count")).toHaveText("4", { timeout: 5000 });
+
             // Confirm button should now be visible and enabled
             const confirmBtn = page.getByTestId('confirm-boundary-button');
             await expect(confirmBtn).toBeVisible({ timeout: 5000 });
             await expect(confirmBtn).toBeEnabled({ timeout: 5000 });
+
+            // Button should have the new text
+            await expect(page.getByText(/Lock Site Geometry/i)).toBeVisible();
         }
     });
 
@@ -312,9 +318,9 @@ test.describe('Map-Guided AR Scan Workflow', () => {
             await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.75);
             await page.waitForTimeout(300);
 
-            // Click Confirm Boundary
+            // Click Lock Site Geometry
             const confirmBtn = page.getByTestId('confirm-boundary-button');
-            await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+            await expect(confirmBtn).toBeEnabled({ timeout: 5000 });
             await confirmBtn.click();
 
             // Should transition to AR scanning phase (two-screen workflow)
@@ -356,8 +362,8 @@ test.describe('Map-Guided AR Scan Workflow', () => {
             }
 
             // Should show area calculation and node count in diagnostics
-            await expect(page.getByText(/Area:/i)).toBeVisible({ timeout: 5000 });
-            await expect(page.getByText(/4 NODES/i)).toBeVisible({ timeout: 5000 });
+            await expect(page.getByTestId("area-value")).toBeVisible({ timeout: 5000 });
+            await expect(page.getByTestId("node-count")).toHaveText("4", { timeout: 5000 });
         }
     });
 });

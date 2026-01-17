@@ -154,6 +154,19 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
                 </div>
             )}
 
+            {/* Ground Detection mandatory overlay */}
+            {!groundDetection.isPointingAtGround && (
+                <div className="absolute inset-0 z-[100] bg-black/60 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+                    <div className="w-24 h-24 border-2 border-dashed border-emerald-500 rounded-full flex items-center justify-center mb-6 animate-pulse">
+                        <span className="text-4xl">📱</span>
+                    </div>
+                    <h3 className="text-white text-2xl font-black uppercase tracking-tight mb-2">Tilt Phone Down</h3>
+                    <p className="text-emerald-500/70 text-sm font-bold uppercase tracking-widest leading-relaxed">
+                        Camera must point towards floor <br /> to anchor spatial geometry.
+                    </p>
+                </div>
+            )}
+
             {/* Smart Instructions with Ground Detection */}
             <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 w-[85%] max-w-md">
                 <div className="bg-black/40 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 shadow-2xl flex items-center gap-4">
@@ -163,14 +176,14 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
                             ? 'bg-emerald-500 animate-pulse'
                             : 'bg-red-500 animate-ping'
                         }`} />
-                    <p className="text-white text-xs font-bold uppercase tracking-widest leading-tight">
+                    <p className="text-white text-[10px] font-black uppercase tracking-widest leading-tight">
                         {!groundDetection.isPointingAtGround
-                            ? '📷 Point camera at ground'
+                            ? 'Awaiting Calibration'
                             : coverage.coveragePercent >= 95
-                                ? '🎯 Target Reached! Review results'
+                                ? 'TARGET REACHED'
                                 : coverage.isInsideBoundary
-                                    ? 'Recording Coverage... Keep Walking'
-                                    : '⚠️ Outside Boundary - Return to zone'}
+                                    ? 'RECORDING COVERAGE'
+                                    : 'OUTSIDE BOUNDARY'}
                     </p>
                 </div>
             </div>
