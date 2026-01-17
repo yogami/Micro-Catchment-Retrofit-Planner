@@ -85,7 +85,7 @@ export function MapBoundaryView({
                 const m = new mapboxgl.Map({
                     container: mapContainer.current,
                     accessToken: MAPBOX_TOKEN,
-                    style: 'mapbox://styles/mapbox/satellite-v9',
+                    style: 'mapbox://styles/mapbox/satellite-streets-v12?optimize=true',
                     center: [initLon, initLat],
                     zoom: 19.5,
                     pitch: 0,
@@ -97,6 +97,9 @@ export function MapBoundaryView({
                 const markReady = () => {
                     if (!isMapReady) {
                         console.log('[MAP_ENGINE] READY');
+                        // Force a camera update and resize to unstick black canvas
+                        m.jumpTo({ center: [initLon, initLat], zoom: 19.5 });
+                        m.resize();
                         setIsMapReady(true);
                     }
                 };
@@ -245,7 +248,7 @@ export function MapBoundaryView({
                 ALWAYS ON GRID OVERLAY 
                 For spatial context even if map is loading or dark.
             */}
-            <div className="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px pointer-events-none z-15 opacity-20">
+            <div className="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px pointer-events-none z-20 opacity-20">
                 {Array.from({ length: 144 }).map((_, i) => <div key={i} className="border-[0.5px] border-emerald-500/30" />)}
             </div>
 
