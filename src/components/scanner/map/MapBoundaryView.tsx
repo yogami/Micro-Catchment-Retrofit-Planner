@@ -75,20 +75,23 @@ export function MapBoundaryView({
         const watchdog = setTimeout(() => {
             if (!isMapReady && !mapInitError) {
                 console.warn('Mapbox load watchdog triggered.');
-                // We don't force READY here anymore; the UI now has a manual override
             }
         }, 12000);
 
         const timer = setTimeout(() => {
             if (!mapContainer.current || hasInitRef.current) return;
-            hasInitRef.current = true; // Lock ONLY when we actually call the constructor
+            hasInitRef.current = true;
 
             try {
-                console.log(`Starting Mapbox init at ${gps.lat}, ${gps.lon}`);
+                const initLat = gps.lat!;
+                const initLon = gps.lon!;
+                console.log(`[MAP_ENGINE] Starting init at ${initLat}, ${initLon}`);
+
                 const m = new mapboxgl.Map({
                     container: mapContainer.current,
+                    accessToken: MAPBOX_TOKEN, // PASS DIRECTLY
                     style: 'mapbox://styles/mapbox/satellite-v9',
-                    center: [gps.lon!, gps.lat!],
+                    center: [initLon, initLat],
                     zoom: 19.5,
                     pitch: 0,
                     antialias: true,
@@ -97,12 +100,13 @@ export function MapBoundaryView({
                 });
 
                 const markReady = () => {
-                    console.log('Map engine signaling READY');
-                    setIsMapReady(true);
+                    if (!isMapReady) {
+                        console.log('[MAP_ENGINE] READY signal received');
+                        setIsMapReady(true);
+                    }
                 };
 
                 m.on('style.load', markReady);
-                m.on('styledata', markReady);
                 m.on('render', () => { if (!isMapReady) markReady(); });
 
                 m.on('load', () => {
@@ -111,30 +115,28 @@ export function MapBoundaryView({
                 });
 
                 m.on('error', (e) => {
-                    console.error('Mapbox error event:', e);
+                    console.error('[MAP_ENGINE] Error:', e);
                     const err = e.error || e;
                     let message = typeof err === 'string' ? err : err.message || JSON.stringify(err);
 
                     const status = (err as any)?.status;
-                    if (status === 403 || message.includes('Forbidden') || message.includes('Unauthorized')) {
-                        const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 8)}...` : 'MISSING';
+                    if (status === 403 || message.includes('Forbidden') || message.includes('Unauthorized') || status === 401) {
+                        const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 10)}...${MAPBOX_TOKEN.substring(MAPBOX_TOKEN.length - 5)}` : 'MISSING';
                         const currentOrigin = window.location.origin;
-                        message = `AUTH_FAILURE (403): Mapbox is rejecting this Origin.\n[ORIGIN]: ${currentOrigin}\n[TOKEN]: ${tokenSnippet}\n[HINT]: Mapbox token changes can take up to 20 mins to sync. Ensure ${currentOrigin} is whitelisted in Mapbox Console.`;
+                        message = `AUTH_REJECTED (403/401)\nORIGIN: ${currentOrigin}\nTOKEN: ${tokenSnippet}\n\nACTION: Confirm this token is active and allow-lists ${currentOrigin} in Mapbox Dashboard.`;
+                        setMapInitError(true);
                     }
 
                     setRawMapError(message);
-                    if (status === 401 || status === 403) {
-                        setMapInitError(true);
-                        clearTimeout(watchdog);
-                    }
                 });
 
                 map.current = m;
             } catch (err) {
+                console.error('[MAP_ENGINE] Constructor Fatal:', err);
                 setMapInitError(true);
                 setRawMapError(err instanceof Error ? err.message : 'Constructor Failed');
             }
-        }, 1000);
+        }, 100);
 
         return () => {
             clearTimeout(timer);
