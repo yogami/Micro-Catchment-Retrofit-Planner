@@ -118,8 +118,8 @@ export function MapBoundaryView({
                     const status = (err as any)?.status;
                     if (status === 403 || message.includes('Forbidden') || message.includes('Unauthorized')) {
                         const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 8)}...` : 'MISSING';
-                        const currentHost = window.location.host;
-                        message = `AUTH_FAILURE (403): Rejected Domain.\n[TOKEN]: ${tokenSnippet}\n[DOMAIN]: ${currentHost}`;
+                        const currentOrigin = window.location.origin;
+                        message = `AUTH_FAILURE (403): Mapbox is rejecting this Origin.\n[ORIGIN]: ${currentOrigin}\n[TOKEN]: ${tokenSnippet}\n[HINT]: Mapbox token changes can take up to 20 mins to sync. Ensure ${currentOrigin} is whitelisted in Mapbox Console.`;
                     }
 
                     setRawMapError(message);
