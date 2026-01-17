@@ -56,7 +56,7 @@ export function MapBoundaryView({
     const canConfirmCount = vertices.length >= minVertices;
     const isValid = canConfirmCount && !isAreaTooSmall && !isAreaTooLarge && !isTooFar;
 
-    // FIX FLICKER: Separate Init from Cleanup
+    // STEP 1: INITIALIZE MAP ENGINE (ONE-TIME)
     useEffect(() => {
         if (!gps.lat || !gps.lon || !mapContainer.current || hasInitRef.current) return;
 
@@ -72,29 +72,40 @@ export function MapBoundaryView({
                 pitch: 0,
                 antialias: true,
                 maxZoom: 22,
-                minZoom: 12
+                minZoom: 12,
+                trackResize: true
             });
 
-            m.on('load', () => setIsMapReady(true));
+            m.on('style.load', () => {
+                // Ensure no flickering by only flagging ready after style is in place
+                setIsMapReady(true);
+            });
+
+            m.on('load', () => {
+                setIsMapReady(true);
+                m.resize(); // Force layout check
+            });
+
             m.on('error', (e) => {
                 console.error('Mapbox error:', e);
-                // Only show error screen for critical failures (ignore 404 tile errors)
-                const errorStatus = (e.error as any)?.status;
-                if (e.error && errorStatus !== 404) setMapInitError(true);
+                const status = (e.error as any)?.status;
+                if (status && status !== 404) setMapInitError(true);
             });
 
             map.current = m;
         } catch (err) {
-            console.error('Mapbox init failed:', err);
+            console.error('Mapbox fatal init failed:', err);
             setMapInitError(true);
         }
-    }, [gps.lat, gps.lon]); // Re-checks but returns early if hasInitRef is true
+    }, [gps.lat, gps.lon]);
 
     // Cleanup ONLY on unmount
     useEffect(() => {
         return () => {
-            map.current?.remove();
-            map.current = null;
+            if (map.current) {
+                map.current.remove();
+                map.current = null;
+            }
             hasInitRef.current = false;
         };
     }, []);
@@ -106,7 +117,7 @@ export function MapBoundaryView({
         }
     }, [gps.lat, gps.lon, isMapReady, vertices.length]);
 
-    // MANAGE MARKERS
+    // MANAGE MARKERS & POLYGONS
     useEffect(() => {
         if (!map.current || !isMapReady) return;
 
@@ -166,18 +177,35 @@ export function MapBoundaryView({
     const showFallback = !MAPBOX_TOKEN || !isMapReady || mapInitError;
 
     return (
-        <div className="relative w-full h-full bg-slate-950 overflow-hidden" data-testid="map-boundary-view">
+        <div className="relative w-full h-full bg-[#020617] overflow-hidden" data-testid="map-boundary-view">
+            {/* 
+                CRITICAL FIX: Isolated Map Container 
+                React MUST NOT manage any children of the mapContainer.
+                Moving FallbackUI to be a sibling, not a child.
+            */}
             <div
                 ref={mapContainer}
-                className={`absolute inset-0 z-10 ${!showFallback ? 'bg-transparent' : 'bg-slate-900'} flex items-center justify-center`}
+                className="absolute inset-0 z-10"
                 data-testid="map-canvas-container"
-            >
-                {showFallback && <FallbackUI isError={mapInitError} onOverride={() => setMapInitError(true)} />}
-            </div>
+            />
 
-            <div className="absolute inset-0 z-20 cursor-crosshair" onClick={handleContainerClick} data-testid="click-capture-overlay" />
+            {/* Fallback Overlay (Sibling to Map) */}
+            {showFallback && (
+                <div className="absolute inset-0 z-15 bg-[#020617] flex items-center justify-center">
+                    <FallbackUI isError={mapInitError} onOverride={() => setMapInitError(true)} />
+                </div>
+            )}
+
+            {/* Click Capture Overlay */}
+            <div
+                className="absolute inset-0 z-20 cursor-crosshair"
+                onClick={handleContainerClick}
+                data-testid="click-capture-overlay"
+            />
+
             <ScannerHUD color={isTooFar || isAreaTooLarge ? 'amber' : 'emerald'} />
 
+            {/* UI HUD Elements */}
             <div className="absolute top-20 left-6 z-40 pointer-events-none">
                 <p className="text-emerald-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">PHASE 01</p>
                 <h1 className="text-white text-2xl font-black uppercase tracking-tight">Site Planning</h1>
@@ -188,7 +216,7 @@ export function MapBoundaryView({
                     }`}>
                     <div className="flex items-center gap-3">
                         <div className={`w-2 h-2 rounded-full animate-pulse ${isTooFar || isAreaTooLarge ? 'bg-amber-500' :
-                            vertices.length >= minVertices ? 'bg-emerald-500' : 'bg-gray-400'
+                                vertices.length >= minVertices ? 'bg-emerald-500' : 'bg-gray-400'
                             }`} />
                         <p className={`text-[11px] font-black uppercase tracking-widest ${isTooFar || isAreaTooLarge ? 'text-amber-400' : 'text-white'
                             }`}>
@@ -237,7 +265,7 @@ export function MapBoundaryView({
                     <div className="flex justify-between gap-4">
                         <span className="text-gray-500 uppercase">Signal</span>
                         <span className={`font-black ${(gps.accuracy || 100) < 5 ? 'text-emerald-500' :
-                            (gps.accuracy || 100) < 12 ? 'text-cyan-400' : 'text-amber-500'
+                                (gps.accuracy || 100) < 12 ? 'text-cyan-400' : 'text-amber-500'
                             }`}>
                             ±{(gps.accuracy || 0).toFixed(1)}m
                         </span>
@@ -287,13 +315,13 @@ function GPSWaitingView({ accuracy, error, onSpoof }: {
     }, []);
 
     return (
-        <div className="flex flex-col items-center justify-center h-full bg-slate-950 text-white p-8 text-center" data-testid="gps-waiting-view">
+        <div className="flex flex-col items-center justify-center h-full bg-[#020617] text-white p-8 text-center" data-testid="gps-waiting-view">
             <div className="relative w-24 h-24 mb-10">
                 <div className="absolute inset-0 border-4 border-emerald-500/10 rounded-full" />
                 <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
                 <div className="absolute inset-0 flex items-center justify-center"><span className="text-3xl animate-pulse">🛰️</span></div>
             </div>
-            <h2 className="text-2xl font-black mb-3 uppercase tracking-tight">Signal Acquisition</h2>
+            <h2 className="text-2xl font-black mb-3 uppercase tracking-tight text-white">Signal Acquisition</h2>
             <p className="text-slate-500 text-xs mb-10 max-w-[260px] leading-relaxed">{error || 'Locking onto orbital satellites for precision...'}</p>
             {accuracy !== null && (
                 <div className="bg-emerald-500/10 px-8 py-3 rounded-2xl mb-10 border border-emerald-500/20 animate-in zoom-in duration-500">
@@ -302,8 +330,16 @@ function GPSWaitingView({ accuracy, error, onSpoof }: {
             )}
             <div className="flex flex-col gap-4 w-full max-w-xs">
                 {showSkip && (
-                    <button onClick={() => onSpoof(52.5208, 13.4094)} className="w-full py-5 bg-white text-black rounded-3xl font-extrabold uppercase tracking-widest shadow-xl active:scale-95 transition-all">🚀 Quick Start (Berlin)</button>
+                    <button
+                        onClick={() => onSpoof(52.5208, 13.4094)}
+                        className="w-full py-5 bg-white text-black rounded-3xl font-extrabold uppercase tracking-widest shadow-[0_20px_40px_rgba(255,255,255,0.1)] active:scale-95 transition-all animate-in slide-in-from-bottom-4 duration-700"
+                    >
+                        🚀 Quick Start (Berlin)
+                    </button>
                 )}
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/5 text-[9px] text-slate-500 uppercase font-black tracking-tighter">
+                    Ensure location services are enabled in browser
+                </div>
             </div>
         </div>
     );
