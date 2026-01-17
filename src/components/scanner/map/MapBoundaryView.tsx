@@ -72,22 +72,22 @@ export function MapBoundaryView({
             return;
         }
 
-        hasInitRef.current = true;
-
         const watchdog = setTimeout(() => {
             if (!isMapReady && !mapInitError) {
-                console.warn('Mapbox load watchdog triggered. Forcing READY state.');
-                setIsMapReady(true);
+                console.warn('Mapbox load watchdog triggered.');
+                // We don't force READY here anymore; the UI now has a manual override
             }
-        }, 12000); // 12s safety net
+        }, 12000);
 
         const timer = setTimeout(() => {
-            if (!mapContainer.current) return;
+            if (!mapContainer.current || hasInitRef.current) return;
+            hasInitRef.current = true; // Lock ONLY when we actually call the constructor
 
             try {
+                console.log(`Starting Mapbox init at ${gps.lat}, ${gps.lon}`);
                 const m = new mapboxgl.Map({
                     container: mapContainer.current,
-                    style: 'mapbox://styles/mapbox/satellite-v9', // Simpler, faster style
+                    style: 'mapbox://styles/mapbox/satellite-v9',
                     center: [gps.lon!, gps.lat!],
                     zoom: 19.5,
                     pitch: 0,
@@ -96,15 +96,17 @@ export function MapBoundaryView({
                     attributionControl: false
                 });
 
-                // Trigger READY on the first available indicator
-                m.on('style.load', () => setIsMapReady(true));
-                m.on('styledata', () => setIsMapReady(true));
-                m.on('render', () => {
-                    if (!isMapReady) setIsMapReady(true);
-                });
+                const markReady = () => {
+                    console.log('Map engine signaling READY');
+                    setIsMapReady(true);
+                };
+
+                m.on('style.load', markReady);
+                m.on('styledata', markReady);
+                m.on('render', () => { if (!isMapReady) markReady(); });
 
                 m.on('load', () => {
-                    setIsMapReady(true);
+                    markReady();
                     m.resize();
                 });
 
@@ -117,11 +119,11 @@ export function MapBoundaryView({
                     if (status === 403 || message.includes('Forbidden') || message.includes('Unauthorized')) {
                         const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 8)}...` : 'MISSING';
                         const currentHost = window.location.host;
-                        message = `AUTH_FAILURE (403): Mapbox is rejecting this domain.\n[TOKEN]: ${tokenSnippet}\n[DOMAIN]: ${currentHost}\n[FIX]: Whitelist this domain in Mapbox Console.`;
+                        message = `AUTH_FAILURE (403): Rejected Domain.\n[TOKEN]: ${tokenSnippet}\n[DOMAIN]: ${currentHost}`;
                     }
 
                     setRawMapError(message);
-                    if (status === 401 || status === 403 || message.includes('Unauthorized')) {
+                    if (status === 401 || status === 403) {
                         setMapInitError(true);
                         clearTimeout(watchdog);
                     }
@@ -350,6 +352,15 @@ function FallbackUI({ isError, isReady, hasToken, errorMessage, onOverride, onRe
     onOverride: () => void;
     onRetry: () => void;
 }) {
+    const [showSlowLoadOverride, setShowSlowLoadOverride] = useState(false);
+
+    useEffect(() => {
+        if (!isReady && !isError) {
+            const timer = setTimeout(() => setShowSlowLoadOverride(true), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [isReady, isError]);
+
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
             {/*
@@ -377,7 +388,7 @@ function FallbackUI({ isError, isReady, hasToken, errorMessage, onOverride, onRe
                             <p className="text-amber-500 text-3xl mb-4">⚠️</p>
                             <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Satellite Link Interrupted</p>
                             <div className="bg-black/50 p-3 rounded-xl border border-white/5 mb-6 max-h-20 overflow-y-auto">
-                                <p className="text-amber-500/80 text-[10px] font-mono leading-relaxed">
+                                <p className="text-amber-500/80 text-[10px] font-mono leading-relaxed whitespace-pre-wrap">
                                     {errorMessage || 'Unknown engine failure.'}
                                 </p>
                             </div>
@@ -396,7 +407,19 @@ function FallbackUI({ isError, isReady, hasToken, errorMessage, onOverride, onRe
                         <>
                             <div className="w-10 h-10 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
                             <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Engaging Satellites</p>
-                            <p className="text-emerald-500/50 text-[9px] font-bold uppercase tracking-widest">Awaiting Tile Data Stream...</p>
+                            <p className="text-emerald-500/50 text-[9px] font-bold uppercase tracking-widest mb-6">Awaiting Tile Data Stream...</p>
+
+                            {showSlowLoadOverride && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-700">
+                                    <p className="text-[8px] text-white/30 uppercase font-bold mb-3 tracking-widest">Connection Sluggish?</p>
+                                    <button
+                                        onClick={onOverride}
+                                        className="w-full py-3 border border-emerald-500/30 text-emerald-400 text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-500/10 transition-all pointer-events-auto"
+                                    >
+                                        Plan Blind (GPS Only)
+                                    </button>
+                                </div>
+                            )}
                         </>
                     )}
                 </div>
