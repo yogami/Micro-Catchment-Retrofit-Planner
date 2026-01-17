@@ -40,18 +40,22 @@ test.describe('Mapbox Engine Integrity', () => {
         const canvas = page.locator('.mapboxgl-canvas');
         await expect(canvas).toBeVisible({ timeout: 30000 });
 
-        // 2. Log any Mapbox Engine status value
-        const mapValue = page.locator('span:has-text("Map Engine") + span');
-        await expect(mapValue).toBeVisible({ timeout: 10000 });
-        const statusText = await mapValue.textContent();
-        console.log('Map Engine Value:', statusText);
+        // 2. Verify Map Readiness
+        // The polished UI uses a 'READY' indicator in the bottom-right stats panel
+        const readyIndicator = page.locator('.text-emerald-500:has-text("READY")');
 
-        if (statusText?.includes('ERROR')) {
-            const rawError = await page.locator('.bg-black\\/50 p').textContent();
-            console.error('Captured Raw Map Error:', rawError);
+        try {
+            await expect(readyIndicator).toBeVisible({ timeout: 20000 });
+        } catch (e) {
+            // If readiness fails, dump potential error messages
+            const errorMsg = await page.locator('.text-amber-500\\/80')?.textContent().catch(() => null);
+            if (errorMsg) console.error('Map Init Failed with UI Error:', errorMsg);
+            throw e;
         }
 
-        await expect(mapValue).toContainText('READY', { timeout: 30000 });
+        // 3. Ensure no Auth Rejection
+        const authError = page.locator('text=Satellite Link Interrupted');
+        await expect(authError).not.toBeVisible();
 
         console.log('✅ Mapbox Engine Integrity Verified in Playwright');
     });
