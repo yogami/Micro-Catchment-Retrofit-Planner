@@ -37,6 +37,7 @@ export function MapBoundaryView({
     const [vertices, setVertices] = useState<GeoVertex[]>([]);
     const [isMapReady, setIsMapReady] = useState(false);
     const [mapInitError, setMapInitError] = useState(false);
+    const [rawMapError, setRawMapError] = useState<string | null>(null);
 
     // DUAL-MODE GEOLOCATION:
     // Accuracy threshold relaxed to 100m for planning screen visibility.
@@ -89,6 +90,8 @@ export function MapBoundaryView({
             m.on('error', (e) => {
                 console.error('Mapbox error:', e);
                 const status = (e.error as any)?.status;
+                const message = (e.error as any)?.message || 'Unknown Mapbox Error';
+                setRawMapError(message);
                 if (status && status !== 404) setMapInitError(true);
             });
 
@@ -96,6 +99,7 @@ export function MapBoundaryView({
         } catch (err) {
             console.error('Mapbox fatal init failed:', err);
             setMapInitError(true);
+            setRawMapError(err instanceof Error ? err.message : 'Fatal Init');
         }
     }, [gps.lat, gps.lon]);
 
@@ -181,7 +185,6 @@ export function MapBoundaryView({
             {/* 
                 CRITICAL FIX: Isolated Map Container 
                 React MUST NOT manage any children of the mapContainer.
-                Moving FallbackUI to be a sibling, not a child.
             */}
             <div
                 ref={mapContainer}
@@ -189,23 +192,32 @@ export function MapBoundaryView({
                 data-testid="map-canvas-container"
             />
 
-            {/* Fallback Overlay (Sibling to Map) */}
+            {/* 
+                Fallback Overlay (Sibling to Map)
+                FIX: Removed solid background so we can see the map loading underneath 
+            */}
             {showFallback && (
-                <div className="absolute inset-0 z-15 bg-[#020617] flex items-center justify-center">
-                    <FallbackUI isError={mapInitError} onOverride={() => setMapInitError(true)} />
+                <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                    <FallbackUI
+                        isError={mapInitError}
+                        isReady={isMapReady}
+                        hasToken={!!MAPBOX_TOKEN}
+                        errorMessage={rawMapError}
+                        onOverride={() => setMapInitError(true)}
+                    />
                 </div>
             )}
 
-            {/* Click Capture Overlay */}
+            {/* Click Capture Overlay - Higher z-index than fallback to ensure interaction */}
             <div
-                className="absolute inset-0 z-20 cursor-crosshair"
+                className="absolute inset-0 z-30 cursor-crosshair"
                 onClick={handleContainerClick}
                 data-testid="click-capture-overlay"
             />
 
             <ScannerHUD color={isTooFar || isAreaTooLarge ? 'amber' : 'emerald'} />
 
-            {/* UI HUD Elements */}
+            {/* UI HUD Elements - Always on top */}
             <div className="absolute top-20 left-6 z-40 pointer-events-none">
                 <p className="text-emerald-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">PHASE 01</p>
                 <h1 className="text-white text-2xl font-black uppercase tracking-tight">Site Planning</h1>
@@ -216,7 +228,7 @@ export function MapBoundaryView({
                     }`}>
                     <div className="flex items-center gap-3">
                         <div className={`w-2 h-2 rounded-full animate-pulse ${isTooFar || isAreaTooLarge ? 'bg-amber-500' :
-                                vertices.length >= minVertices ? 'bg-emerald-500' : 'bg-gray-400'
+                            vertices.length >= minVertices ? 'bg-emerald-500' : 'bg-gray-400'
                             }`} />
                         <p className={`text-[11px] font-black uppercase tracking-widest ${isTooFar || isAreaTooLarge ? 'text-amber-400' : 'text-white'
                             }`}>
@@ -242,7 +254,7 @@ export function MapBoundaryView({
                 statusMessage={isTooFar ? "Out of safe range" : isAreaTooLarge ? "Above max area" : isAreaTooSmall ? "Area too small" : ""}
             />
 
-            <div className="absolute bottom-32 right-6 z-30 bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-[9px] font-mono pointer-events-none shadow-2xl min-w-[140px]">
+            <div className="absolute bottom-32 right-6 z-40 bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-[9px] font-mono pointer-events-none shadow-2xl min-w-[140px]">
                 <div className="flex flex-col gap-1.5">
                     <div className="flex justify-between items-center text-emerald-400 font-black">
                         <span>NODES</span>
@@ -270,34 +282,72 @@ export function MapBoundaryView({
                             ±{(gps.accuracy || 0).toFixed(1)}m
                         </span>
                     </div>
+                    <div className="h-px bg-white/10 my-0.5" />
+                    <div className="flex justify-between gap-4">
+                        <span className="text-gray-500 uppercase text-[7px]">Map Engine</span>
+                        <span className={`font-black ${mapInitError ? 'text-red-500' : isMapReady ? 'text-emerald-500' : 'text-amber-500'
+                            }`}>
+                            {mapInitError ? 'ERROR' : isMapReady ? 'READY' : 'LOADING'}
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
     );
 }
 
-function FallbackUI({ isError, onOverride }: { isError: boolean; onOverride: () => void }) {
+function FallbackUI({ isError, isReady, hasToken, errorMessage, onOverride }: {
+    isError: boolean;
+    isReady: boolean;
+    hasToken: boolean;
+    errorMessage: string | null;
+    onOverride: () => void
+}) {
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px opacity-60">
-                {Array.from({ length: 144 }).map((_, i) => <div key={i} className="border-[0.5px] border-emerald-500/40" />)}
+            {/*
+                THE GRID: Now transparent so map shows through
+                If token is missing, we keep it dark to signal 'Direct Mode'
+            */}
+            <div className={`absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px transition-colors duration-1000 ${hasToken ? 'opacity-30 bg-black/20' : 'opacity-60 bg-slate-950'
+                }`}>
+                {Array.from({ length: 144 }).map((_, i) => <div key={i} className="border-[0.2px] border-emerald-500/20" />)}
             </div>
-            <div className="absolute top-10 left-0 right-0 h-1.5 bg-gradient-to-b from-emerald-500/50 to-transparent animate-[scan_8s_linear_infinite]" />
-            <div className="border border-emerald-500/20 bg-black/60 backdrop-blur-xl px-10 py-8 rounded-[2.5rem] text-center max-w-xs animate-in fade-in zoom-in duration-1000">
-                {MAPBOX_TOKEN && !isError ? (
-                    <>
-                        <div className="w-10 h-10 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
-                        <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Engaging Satellites</p>
-                        <p className="text-emerald-500/50 text-[9px] font-bold uppercase tracking-widest">Awaiting Tile Data Stream...</p>
-                    </>
-                ) : (
-                    <>
-                        <p className="text-emerald-500 text-3xl mb-4">🛰️</p>
-                        <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Direct GPS Mode</p>
-                        <p className="text-emerald-500/50 text-[9px] font-bold uppercase tracking-widest leading-relaxed mb-6">Satellite Link Restricted. <br /> Tap grid to define region.</p>
-                        <button onClick={onOverride} className="text-[8px] text-emerald-400 font-black border border-emerald-500/30 px-4 py-2 rounded-full hover:bg-emerald-500/10 transition-colors pointer-events-auto">PLAN BLIND (GPS ONLY)</button>
-                    </>
-                )}
+
+            <div className="absolute top-10 left-0 right-0 h-1 bg-gradient-to-b from-emerald-500/30 to-transparent animate-[scan_8s_linear_infinite]" />
+
+            <div className="absolute inset-0 flex items-center justify-center">
+                <div className="border border-emerald-500/20 bg-black/80 backdrop-blur-xl px-10 py-8 rounded-[2.5rem] text-center max-w-xs animate-in fade-in zoom-in duration-700">
+                    {!hasToken ? (
+                        <>
+                            <p className="text-red-500 text-3xl mb-4">🔑</p>
+                            <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Direct GPS Mode</p>
+                            <p className="text-red-400/50 text-[9px] font-bold uppercase tracking-widest leading-relaxed mb-6">Mapbox Token Missing. <br /> Planning blind via coordinates.</p>
+                            <button onClick={onOverride} className="text-[8px] text-emerald-400 font-black border border-emerald-500/30 px-4 py-2 rounded-full hover:bg-emerald-500/10 transition-colors pointer-events-auto">ACKNOWLEDGE</button>
+                        </>
+                    ) : isError ? (
+                        <>
+                            <p className="text-amber-500 text-3xl mb-4">⚠️</p>
+                            <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Satellite Link Interrupted</p>
+                            <p className="text-amber-500/50 text-[9px] font-bold uppercase tracking-widest leading-relaxed mb-4">
+                                {errorMessage || 'Connection failed or WebGL blocked.'}
+                            </p>
+                            <button onClick={onOverride} className="text-[8px] text-emerald-400 font-black border border-emerald-500/30 px-4 py-2 rounded-full hover:bg-emerald-500/10 transition-colors pointer-events-auto">PLAN BLIND (GPS ONLY)</button>
+                        </>
+                    ) : isReady ? (
+                        <>
+                            <div className="w-10 h-10 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
+                            <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Finalizing Stream</p>
+                            <p className="text-emerald-500/50 text-[9px] font-bold uppercase tracking-widest">Constructing Satellite Overlay...</p>
+                        </>
+                    ) : (
+                        <>
+                            <div className="w-10 h-10 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
+                            <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Engaging Satellites</p>
+                            <p className="text-emerald-500/50 text-[9px] font-bold uppercase tracking-widest">Awaiting Tile Data Stream...</p>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     );
