@@ -66,51 +66,44 @@ export function MapBoundaryView({
     useEffect(() => {
         if (!gps.lat || !gps.lon || !mapContainer.current || hasInitRef.current) return;
 
-        // 1. Check for WebGL support
         if (!mapboxgl.supported()) {
             setMapInitError(true);
-            setRawMapError("WebGL not supported or hardware acceleration disabled.");
+            setRawMapError("WebGL not supported.");
             return;
         }
 
         hasInitRef.current = true;
 
-        // Add a micro-delay to ensure container ref is settled in DOM
+        const watchdog = setTimeout(() => {
+            if (!isMapReady && !mapInitError) {
+                console.warn('Mapbox load watchdog triggered. Forcing READY state.');
+                setIsMapReady(true);
+            }
+        }, 12000); // 12s safety net
+
         const timer = setTimeout(() => {
             if (!mapContainer.current) return;
-
-            // Validate container size
-            const { width, height } = mapContainer.current.getBoundingClientRect();
-            if (width === 0 || height === 0) {
-                console.error('Map container has 0 dimensions:', width, height);
-                setRawMapError(`Container size error: ${width}x${height}`);
-                hasInitRef.current = false; // Allow retry
-                return;
-            }
 
             try {
                 const m = new mapboxgl.Map({
                     container: mapContainer.current,
-                    style: 'mapbox://styles/mapbox/satellite-streets-v12',
+                    style: 'mapbox://styles/mapbox/satellite-v9', // Simpler, faster style
                     center: [gps.lon!, gps.lat!],
                     zoom: 19.5,
                     pitch: 0,
                     antialias: true,
-                    maxZoom: 22,
-                    minZoom: 12,
                     trackResize: true,
-                    failIfMajorPerformanceCaveat: false,
-                    preserveDrawingBuffer: true,
                     attributionControl: false
                 });
 
-                m.on('style.load', () => {
-                    console.log('Map style loaded successfully');
-                    setIsMapReady(true);
+                // Trigger READY on the first available indicator
+                m.on('style.load', () => setIsMapReady(true));
+                m.on('styledata', () => setIsMapReady(true));
+                m.on('render', () => {
+                    if (!isMapReady) setIsMapReady(true);
                 });
 
                 m.on('load', () => {
-                    console.log('Map fully loaded');
                     setIsMapReady(true);
                     m.resize();
                 });
@@ -118,41 +111,32 @@ export function MapBoundaryView({
                 m.on('error', (e) => {
                     console.error('Mapbox error event:', e);
                     const err = e.error || e;
+                    let message = typeof err === 'string' ? err : err.message || JSON.stringify(err);
 
-                    let message = typeof err === 'string' ? err :
-                        err.message ? err.message :
-                            JSON.stringify(err);
-
-                    // Specific hints for Mapbox issues
                     const status = (err as any)?.status;
-                    if (status === 403 || message.includes('Forbidden') || message.includes('Unauthorized') || message.includes('Unknown')) {
-                        const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 8)}... (len: ${MAPBOX_TOKEN.length})` : 'MISSING';
-                        message = `MAPBOX_AUTH_FAILURE: Token issues detected. \nToken: ${tokenSnippet}\nErr: ${message}`;
+                    if (status === 403 || message.includes('Forbidden') || message.includes('Unauthorized')) {
+                        const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 8)}...` : 'MISSING';
+                        message = `AUTH_FAILURE: Check Domain/Token. \nToken: ${tokenSnippet}`;
                     }
 
                     setRawMapError(message);
-
-                    // Only show critical error UI for token/auth issues, WebGL loss, or missing style
-                    if (status === 401 || status === 403 || message.toLowerCase().includes('webgl') || message.includes('Unauthorized') || message.includes('AUTH')) {
+                    if (status === 401 || status === 403 || message.includes('Unauthorized')) {
                         setMapInitError(true);
+                        clearTimeout(watchdog);
                     }
-                });
-
-                m.on('webglcontextlost', () => {
-                    setMapInitError(true);
-                    setRawMapError("WebGL Context Lost. Device memory pressure?");
                 });
 
                 map.current = m;
             } catch (err) {
-                console.error('Mapbox constructor failure:', err);
                 setMapInitError(true);
-                const msg = err instanceof Error ? err.message : 'Constructor Failed';
-                setRawMapError(`FATAL_CONSTRUCTOR: ${msg}`);
+                setRawMapError(err instanceof Error ? err.message : 'Constructor Failed');
             }
-        }, 1000); // Increased delay for stability
+        }, 1000);
 
-        return () => clearTimeout(timer);
+        return () => {
+            clearTimeout(timer);
+            clearTimeout(watchdog);
+        };
     }, [gps.lat, gps.lon]);
 
     const handleRetry = useCallback(() => {
