@@ -156,7 +156,10 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
 
             {/* Ground Detection mandatory overlay */}
             {!groundDetection.isPointingAtGround && (
-                <div className="absolute inset-0 z-[100] bg-black/60 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+                <div
+                    data-testid="ground-detection-overlay"
+                    className="absolute inset-0 z-[100] bg-black/60 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500"
+                >
                     <div className="w-24 h-24 border-2 border-dashed border-emerald-500 rounded-full flex items-center justify-center mb-6 animate-pulse">
                         <span className="text-4xl">📱</span>
                     </div>
