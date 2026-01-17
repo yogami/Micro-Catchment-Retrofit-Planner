@@ -78,8 +78,9 @@ export function MapBoundaryView({
             m.on('load', () => setIsMapReady(true));
             m.on('error', (e) => {
                 console.error('Mapbox error:', e);
-                // Only show error screen for critical failures
-                if (e.error && e.error.status !== 404) setMapInitError(true);
+                // Only show error screen for critical failures (ignore 404 tile errors)
+                const errorStatus = (e.error as any)?.status;
+                if (e.error && errorStatus !== 404) setMapInitError(true);
             });
 
             map.current = m;
@@ -187,7 +188,7 @@ export function MapBoundaryView({
                     }`}>
                     <div className="flex items-center gap-3">
                         <div className={`w-2 h-2 rounded-full animate-pulse ${isTooFar || isAreaTooLarge ? 'bg-amber-500' :
-                                vertices.length >= minVertices ? 'bg-emerald-500' : 'bg-gray-400'
+                            vertices.length >= minVertices ? 'bg-emerald-500' : 'bg-gray-400'
                             }`} />
                         <p className={`text-[11px] font-black uppercase tracking-widest ${isTooFar || isAreaTooLarge ? 'text-amber-400' : 'text-white'
                             }`}>
@@ -236,7 +237,7 @@ export function MapBoundaryView({
                     <div className="flex justify-between gap-4">
                         <span className="text-gray-500 uppercase">Signal</span>
                         <span className={`font-black ${(gps.accuracy || 100) < 5 ? 'text-emerald-500' :
-                                (gps.accuracy || 100) < 12 ? 'text-cyan-400' : 'text-amber-500'
+                            (gps.accuracy || 100) < 12 ? 'text-cyan-400' : 'text-amber-500'
                             }`}>
                             ±{(gps.accuracy || 0).toFixed(1)}m
                         </span>
