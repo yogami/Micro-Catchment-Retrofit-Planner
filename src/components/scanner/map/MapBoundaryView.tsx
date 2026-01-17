@@ -86,29 +86,22 @@ export function MapBoundaryView({
                     container: mapContainer.current,
                     accessToken: MAPBOX_TOKEN,
                     style: 'mapbox://styles/mapbox/satellite-v9',
-                    center: [initLon, initLat],
-                    zoom: 19.5,
+                    center: [Number(initLon), Number(initLat)],
+                    zoom: 17,
                     pitch: 0,
                     antialias: true,
                     trackResize: true,
-                    preserveDrawingBuffer: true, // CRITICAL for screenshots/debugging
-                    attributionControl: false
+                    preserveDrawingBuffer: true,
+                    attributionControl: false,
+                    transformRequest: (url, resourceType) => {
+                        if (resourceType === 'Tile') console.log(`[MAP_TILE]: ${url.substring(0, 50)}...`);
+                        return { url };
+                    }
                 });
 
                 const markReady = () => {
                     if (!isMapReady) {
                         console.log('[MAP_ENGINE] READY. Center:', m.getCenter());
-
-                        // DEBUG: Add a background color to verify WebGL context
-                        if (m.getStyle() && !m.getLayer('debug-bg')) {
-                            m.addLayer({
-                                id: 'debug-bg',
-                                type: 'background',
-                                paint: { 'background-color': '#0f172a' } // Slate-900 (should cover if tiles missing)
-                            });
-                        }
-
-                        // Force refresh
                         m.resize();
                         setIsMapReady(true);
                     }
