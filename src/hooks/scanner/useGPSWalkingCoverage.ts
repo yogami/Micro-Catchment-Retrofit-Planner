@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { GeoPolygon } from '../../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
+import { GeoPolygon } from '../../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
 
 interface GPSPosition {
     lat: number;
@@ -123,7 +123,8 @@ export function useGPSWalkingCoverage(
 
     // GPS tracking with fusion
     useEffect(() => {
-        if (!isScanning || !boundary) {
+        const poly = GeoPolygon.ensureInstance(boundary);
+        if (!isScanning || !poly) {
             if (watchIdRef.current !== null) {
                 navigator.geolocation.clearWatch(watchIdRef.current);
                 watchIdRef.current = null;
@@ -131,9 +132,9 @@ export function useGPSWalkingCoverage(
             return;
         }
 
-        const origin = boundary.getCentroid();
+        const origin = poly.getCentroid();
         const voxelSize = 0.5; // 50cm voxels for better precision
-        const totalVoxels = calculateTotalVoxels(boundary, voxelSize);
+        const totalVoxels = calculateTotalVoxels(poly, voxelSize);
 
         setState(s => ({
             ...s,
@@ -174,7 +175,7 @@ export function useGPSWalkingCoverage(
                         confidence: Math.max(0, 1 - gpsPos.accuracy / 20) // 20m = 0 confidence
                     };
 
-                    const isInside = boundary.containsPoint(gpsPos.lat, gpsPos.lon);
+                    const isInside = poly.containsPoint(gpsPos.lat, gpsPos.lon);
                     const newPainted = new Map(s.voxelGrid.painted);
 
                     if (isInside) {

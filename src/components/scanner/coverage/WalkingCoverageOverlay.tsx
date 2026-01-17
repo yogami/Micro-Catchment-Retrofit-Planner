@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import type { GeoPolygon } from '../../../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
+import { GeoPolygon } from '../../../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
 
 interface VoxelData {
     worldX: number;
@@ -36,10 +36,11 @@ export function WalkingCoverageOverlay({
 
     useEffect(() => {
         const ctx = canvasRef.current?.getContext('2d');
-        if (!ctx || !boundary) return;
+        const poly = GeoPolygon.ensureInstance(boundary);
+        if (!ctx || !poly) return;
 
-        const bounds = boundary.getBounds();
-        const origin = boundary.getCentroid();
+        const bounds = poly.getBounds();
+        const origin = poly.getCentroid();
 
         // Calculate viewport
         const rangeX = (bounds.maxLon - bounds.minLon) * 111320 * Math.cos(origin.lat * Math.PI / 180);
@@ -80,7 +81,7 @@ export function WalkingCoverageOverlay({
         }
 
         // Draw boundary polygon
-        const vertices = boundary.vertices;
+        const vertices = poly.vertices;
         if (vertices.length >= 3) {
             ctx.beginPath();
             vertices.forEach((v, i) => {

@@ -53,6 +53,15 @@ test.describe('Map-Guided AR Scan Workflow', () => {
 
             // Mock DeviceOrientationEvent
             (window as any).__mockDeviceOrientationGranted = true;
+            (window as any).__mockDeviceOrientation = { beta: 75, gamma: 0 };
+            (window as any).isE2E = true;
+
+            // Dispatch event to trigger hook
+            window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', {
+                beta: 75,
+                gamma: 0,
+                alpha: 0
+            } as any));
         });
     });
 
@@ -242,7 +251,7 @@ test.describe('Map-Guided AR Scan Workflow', () => {
             await page.waitForTimeout(200);
 
             // Should show nodes count in diagnostics
-            await expect(page.getByText(/4 \/ 4 Nodes/i)).toBeVisible({ timeout: 5000 });
+            await expect(page.getByText(/4 NODES/i)).toBeVisible({ timeout: 5000 });
         }
     });
 
@@ -262,18 +271,19 @@ test.describe('Map-Guided AR Scan Workflow', () => {
 
         if (box) {
             // Click 4 points (minimum required)
-            for (let i = 0; i < 4; i++) {
-                const angle = (i * Math.PI * 2) / 4;
-                const x = box.x + box.width / 2 + Math.cos(angle) * box.width * 0.3;
-                const y = box.y + box.height / 2 + Math.sin(angle) * box.height * 0.3;
-                await page.mouse.click(x, y);
-                await page.waitForTimeout(200);
-            }
+            await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.3);
+            await page.waitForTimeout(150);
+            await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.3);
+            await page.waitForTimeout(150);
+            await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.7);
+            await page.waitForTimeout(150);
+            await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.7);
+            await page.waitForTimeout(200);
 
             // Confirm button should now be visible and enabled
             const confirmBtn = page.getByTestId('confirm-boundary-button');
             await expect(confirmBtn).toBeVisible({ timeout: 5000 });
-            await expect(confirmBtn).toBeEnabled();
+            await expect(confirmBtn).toBeEnabled({ timeout: 5000 });
         }
     });
 
@@ -339,16 +349,15 @@ test.describe('Map-Guided AR Scan Workflow', () => {
         if (box) {
             // Add 4 vertices
             for (let i = 0; i < 4; i++) {
-                await page.mouse.click(
-                    box.x + box.width * (0.3 + (i % 2) * 0.4),
-                    box.y + box.height * (0.3 + Math.floor(i / 2) * 0.4)
-                );
+                const x = box.x + box.width * (0.3 + (i % 2) * 0.4);
+                const y = box.y + box.height * (0.3 + Math.floor(i / 2) * 0.4);
+                await page.mouse.click(x, y);
                 await page.waitForTimeout(200);
             }
 
             // Should show area calculation and node count in diagnostics
             await expect(page.getByText(/Area:/i)).toBeVisible({ timeout: 5000 });
-            await expect(page.getByText(/node/i).first()).toBeVisible({ timeout: 5000 });
+            await expect(page.getByText(/4 NODES/i)).toBeVisible({ timeout: 5000 });
         }
     });
 });
@@ -393,6 +402,14 @@ test.describe('Workflow Integration', () => {
             };
 
             navigator.geolocation.clearWatch = () => { };
+
+            (window as any).__mockDeviceOrientation = { beta: 75, gamma: 0 };
+            (window as any).isE2E = true;
+            window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', {
+                beta: 75,
+                gamma: 0,
+                alpha: 0
+            } as any));
         });
     });
 

@@ -32,6 +32,18 @@ export class GeoPolygon {
         return new GeoPolygon(vertices);
     }
 
+    /**
+     * Defense against serialization/plainification.
+     * Re-instantiates GeoPolygon if the input looks like a POJO.
+     */
+    static ensureInstance(obj: any): GeoPolygon | null {
+        if (!obj) return null;
+        if (obj instanceof GeoPolygon) return obj;
+        if (Array.isArray(obj._vertices)) return new GeoPolygon(obj._vertices);
+        if (Array.isArray(obj.vertices)) return new GeoPolygon(obj.vertices);
+        return null;
+    }
+
     private static validateVertices(vertices: GeoVertex[]): void {
         if (vertices.length < 3) {
             throw new Error('GeoPolygon requires at least 3 vertices');

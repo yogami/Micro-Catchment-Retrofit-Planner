@@ -3,6 +3,7 @@ import { useARScanner } from '../../hooks/useARScanner';
 import { useGPSWalkingCoverage } from '../../hooks/scanner/useGPSWalkingCoverage';
 import { useGroundDetection } from '../../hooks/scanner/useGroundDetection';
 import { WalkingCoverageOverlay } from './coverage/WalkingCoverageOverlay';
+import { GeoPolygon } from '../../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
 import { ScannerHUD } from './HUD/ScannerHUD';
 
 type ScannerHook = ReturnType<typeof useARScanner>;
@@ -34,8 +35,9 @@ export function ARWalkingView({ scanner }: { scanner: ScannerHook }) {
 
     // Sync coverage data to scanner state
     useEffect(() => {
+        const poly = GeoPolygon.ensureInstance(scanner.geoBoundary);
         scanner.update({
-            detectedArea: scanner.geoBoundary?.areaSquareMeters ?? 0,
+            detectedArea: poly?.areaSquareMeters ?? 0, // FIXED: Ensure instance for domain methods
             scanProgress: coverage.coveragePercent,
             voxels: coverage.getVoxelArray().map(v => v.key)
         });
