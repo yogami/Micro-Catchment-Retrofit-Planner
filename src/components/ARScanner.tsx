@@ -30,7 +30,7 @@ export function ARScanner() {
 }
 
 function DebugDashboard({ scanner }: { scanner: any }) {
-    if (scanner.scanPhase === 'scanning' && !scanner.isLocked) return null;
+    if (scanner.scanPhase === 'planning' || (scanner.scanPhase === 'scanning' && !scanner.isLocked)) return null;
 
     return (
         <div className="fixed bottom-20 right-4 z-[100] bg-black/80 backdrop-blur p-3 rounded-2xl border border-white/10 font-mono text-[9px] pointer-events-none shadow-2xl">
