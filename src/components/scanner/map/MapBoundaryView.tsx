@@ -72,14 +72,7 @@ export function MapBoundaryView({
             return;
         }
 
-        // HEAVY SYNC: Ensure token is set everywhere
         mapboxgl.accessToken = MAPBOX_TOKEN;
-
-        const watchdog = setTimeout(() => {
-            if (!isMapReady && !mapInitError) {
-                console.warn('[MAP_ENGINE] Watchdog: Long load detected');
-            }
-        }, 15000);
 
         const timer = setTimeout(() => {
             if (!mapContainer.current || hasInitRef.current) return;
@@ -88,72 +81,54 @@ export function MapBoundaryView({
             try {
                 const initLat = gps.lat!;
                 const initLon = gps.lon!;
-                console.log(`[MAP_ENGINE] Launching with Origin: ${window.location.origin}`);
 
                 const m = new mapboxgl.Map({
                     container: mapContainer.current,
                     accessToken: MAPBOX_TOKEN,
-                    style: `mapbox://styles/mapbox/satellite-v9?cachebust=${Date.now()}`,
+                    style: 'mapbox://styles/mapbox/satellite-v9',
                     center: [initLon, initLat],
                     zoom: 19.5,
                     pitch: 0,
                     antialias: true,
                     trackResize: true,
-                    attributionControl: false,
-                    // INTERCEPTOR: Log exactly what's being sent
-                    transformRequest: (url, resourceType) => {
-                        if (resourceType === 'Style' || resourceType === 'Source' || resourceType === 'Tile') {
-                            console.log(`[MAP_NETWORK] ${resourceType}: ${url.substring(0, 100)}...`);
-                        }
-                        return { url };
-                    }
+                    attributionControl: false
                 });
 
                 const markReady = () => {
                     if (!isMapReady) {
-                        console.log('[MAP_ENGINE] Status: READY');
+                        console.log('[MAP_ENGINE] READY');
                         setIsMapReady(true);
                     }
                 };
 
                 m.on('style.load', markReady);
-                m.on('styledata', markReady);
                 m.on('render', () => { if (!isMapReady) markReady(); });
-
-                m.on('load', () => {
-                    markReady();
-                    m.resize();
-                });
+                m.on('load', () => { markReady(); m.resize(); });
 
                 m.on('error', (e) => {
-                    console.error('[MAP_ENGINE] Fatal Event:', e);
+                    console.error('[MAP_ENGINE] Error:', e);
                     const err = e.error || e;
-                    let message = typeof err === 'string' ? err : err.message || JSON.stringify(err);
-
+                    const message = typeof err === 'string' ? err : err.message || JSON.stringify(err);
                     const status = (err as any)?.status;
-                    if (status === 403 || status === 401 || message.includes('Forbidden') || message.includes('Unauthorized')) {
-                        const tokenSnippet = MAPBOX_TOKEN ? `${MAPBOX_TOKEN.substring(0, 10)}...${MAPBOX_TOKEN.substring(MAPBOX_TOKEN.length - 8)}` : 'MISSING';
-                        const currentOrigin = window.location.origin;
-                        message = `AUTH_REJECTED (403)\nORIGIN: ${currentOrigin}\nTOKEN: ${tokenSnippet}\n\nACTION: Confirm this token has NO RESTRICTIONS in Mapbox Dashboard or allow-lists ${currentOrigin}.`;
-                        setMapInitError(true);
-                    }
 
-                    setRawMapError(message);
+                    if (status === 403 || status === 401 || message.includes('Forbidden') || message.includes('Unauthorized')) {
+                        setRawMapError("Mapbox Authentication Failure. Please check your token and domain restrictions.");
+                        setMapInitError(true);
+                    } else {
+                        setRawMapError(message);
+                    }
                 });
 
                 map.current = m;
             } catch (err) {
-                console.error('[MAP_ENGINE] Constructor Crash:', err);
+                console.error('[MAP_ENGINE] Constructor Fatal:', err);
                 setMapInitError(true);
                 setRawMapError(err instanceof Error ? err.message : 'Constructor Failed');
             }
-        }, 150);
+        }, 100);
 
-        return () => {
-            clearTimeout(timer);
-            clearTimeout(watchdog);
-        };
-    }, [gps.lat, gps.lon, isMapReady, mapInitError]);
+        return () => clearTimeout(timer);
+    }, [gps.lat, gps.lon]);
 
     const handleRetry = useCallback(() => {
         setMapInitError(false);
@@ -357,22 +332,15 @@ export function MapBoundaryView({
     );
 }
 
-function FallbackUI({ isError, isReady, hasToken, errorMessage, onOverride, onRetry }: {
+
+function FallbackUI({ isError, isReady, hasToken, errorMessage, onRetry }: {
     isError: boolean;
     isReady: boolean;
     hasToken: boolean;
     errorMessage: string | null;
-    onOverride: () => void;
+    onOverride?: () => void; // Keeping optional for now to avoid breaking parent
     onRetry: () => void;
 }) {
-    const [showSlowLoadOverride, setShowSlowLoadOverride] = useState(false);
-
-    useEffect(() => {
-        if (!isReady && !isError) {
-            const timer = setTimeout(() => setShowSlowLoadOverride(true), 5000);
-            return () => clearTimeout(timer);
-        }
-    }, [isReady, isError]);
 
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -394,45 +362,30 @@ function FallbackUI({ isError, isReady, hasToken, errorMessage, onOverride, onRe
                             <p className="text-red-500 text-3xl mb-4">🔑</p>
                             <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Direct GPS Mode</p>
                             <p className="text-red-400/50 text-[9px] font-bold uppercase tracking-widest leading-relaxed mb-6">Mapbox Token Missing. <br /> Planning blind via coordinates.</p>
-                            <button onClick={onOverride} className="text-[8px] text-emerald-400 font-black border border-emerald-500/30 px-4 py-2 rounded-full hover:bg-emerald-500/10 transition-colors pointer-events-auto">ACKNOWLEDGE</button>
+                            <button onClick={onRetry} className="text-[8px] text-emerald-400 font-black border border-emerald-500/30 px-4 py-2 rounded-full hover:bg-emerald-500/10 transition-colors pointer-events-auto">ACKNOWLEDGE</button>
                         </>
                     ) : isError ? (
                         <>
                             <p className="text-amber-500 text-3xl mb-4">⚠️</p>
                             <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Satellite Link Interrupted</p>
-                            <div className="bg-black/50 p-3 rounded-xl border border-white/5 mb-6 max-h-20 overflow-y-auto">
-                                <p className="text-amber-500/80 text-[10px] font-mono leading-relaxed whitespace-pre-wrap">
+                            <div className="bg-black/50 p-4 rounded-xl border border-white/5 mb-6">
+                                <p className="text-amber-500/80 text-[10px] font-mono leading-relaxed text-center">
                                     {errorMessage || 'Unknown engine failure.'}
                                 </p>
                             </div>
-                            <div className="flex flex-col gap-2">
-                                <button onClick={onRetry} className="w-full py-3 bg-emerald-500 text-black text-[9px] font-black uppercase tracking-widest rounded-xl hover:scale-105 active:scale-95 transition-all">RETRY CONNECTION</button>
-                                <button onClick={onOverride} className="w-full py-3 text-white/40 text-[8px] font-bold uppercase tracking-widest hover:text-white transition-colors">PLAN BLIND (GPS ONLY)</button>
-                            </div>
+                            <button onClick={onRetry} className="w-full py-3 bg-emerald-500 text-black text-[9px] font-black uppercase tracking-widest rounded-xl hover:scale-105 active:scale-95 transition-all pointer-events-auto">RETRY CONNECTION</button>
                         </>
                     ) : isReady ? (
                         <>
                             <div className="w-10 h-10 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
                             <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Finalizing Stream</p>
-                            <p className="text-emerald-500/50 text-[9px] font-bold uppercase tracking-widest">Constructing Satellite Overlay...</p>
+                            <p className="text-emerald-500/50 text-[9px] font-bold uppercase tracking-widest text-center">Constructing Satellite Overlay...</p>
                         </>
                     ) : (
                         <>
                             <div className="w-10 h-10 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4" />
                             <p className="text-white text-xs font-black uppercase tracking-[0.2em] mb-1">Engaging Satellites</p>
-                            <p className="text-emerald-500/50 text-[9px] font-bold uppercase tracking-widest mb-6">Awaiting Tile Data Stream...</p>
-
-                            {showSlowLoadOverride && (
-                                <div className="animate-in fade-in slide-in-from-top-2 duration-700">
-                                    <p className="text-[8px] text-white/30 uppercase font-bold mb-3 tracking-widest">Connection Sluggish?</p>
-                                    <button
-                                        onClick={onOverride}
-                                        className="w-full py-3 border border-emerald-500/30 text-emerald-400 text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-500/10 transition-all pointer-events-auto"
-                                    >
-                                        Plan Blind (GPS Only)
-                                    </button>
-                                </div>
-                            )}
+                            <p className="text-emerald-500/50 text-[9px] font-bold uppercase tracking-widest text-center">Awaiting Tile Data Stream...</p>
                         </>
                     )}
                 </div>
