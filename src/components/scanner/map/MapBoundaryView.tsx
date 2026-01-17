@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo, useLayoutEffect } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { GeoPolygon, type GeoVertex } from '../../../lib/spatial-coverage/domain/valueObjects/GeoPolygon';
@@ -154,20 +154,25 @@ export function MapBoundaryView({
             hasInitRef.current = false;
         };
     }, []);
-    // STEP 2: RESIZE OBSERVER
-    useEffect(() => {
-        if (!mapContainer.current || !map.current) return;
+    // STEP 2: RESIZE OBSERVER & FORCED DIMENSIONS
+    useLayoutEffect(() => {
+        if (!mapContainer.current) return;
 
+        // Force dimensions to prevent collapse
+        mapContainer.current.style.setProperty('height', '100%', 'important');
+        mapContainer.current.style.setProperty('width', '100%', 'important');
+
+        const m = map.current;
         const resizeObserver = new ResizeObserver(() => {
-            if (map.current) {
-                map.current.resize();
+            if (m) {
+                m.resize();
             }
         });
 
         resizeObserver.observe(mapContainer.current);
 
         return () => resizeObserver.disconnect();
-    }, [isMapReady]); // Re-attach if map ready state changes, just in case
+    }, [isMapReady]);
 
     // FOLLOW GPS ONLY IF NO NODES PLACED
     useEffect(() => {
@@ -242,20 +247,24 @@ export function MapBoundaryView({
                 Wrapped in an absolute div to prevent Mapbox from collapsing the layout 
                 when it injects its own relative positioning.
             */}
-            <div className="absolute inset-0 z-10">
-                <div
-                    ref={mapContainer}
-                    className="w-full h-full"
-                    data-testid="map-canvas-container"
-                />
-            </div>
+            {/* 
+                CRITICAL FIX: Forced Map Context 
+                We use inline !important styles to ensure Mapbox's internal 
+                'position: relative' injection does NOT collapse the element 
+                to 0px height.
+            */}
+            <div
+                ref={mapContainer}
+                className="absolute inset-0 z-10"
+                data-testid="map-canvas-container"
+            />
 
             {/* 
-                ALWAYS ON GRID OVERLAY 
-                Increased visibility and thicker lines to ensure it is unmistakable.
+                ULTRA-VISIBLE GRID OVERLAY 
+                Increased opacity and more vibrant border to ensure visibility on all hardware.
             */}
-            <div className="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px pointer-events-none z-20 opacity-40">
-                {Array.from({ length: 144 }).map((_, i) => <div key={i} className="border-[1px] border-emerald-500/40" />)}
+            <div className="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px pointer-events-none z-20 opacity-80">
+                {Array.from({ length: 144 }).map((_, i) => <div key={i} className="border-[1px] border-emerald-500/60" />)}
             </div>
 
             {/* 
