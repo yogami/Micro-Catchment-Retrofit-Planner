@@ -85,20 +85,30 @@ export function MapBoundaryView({
                 const m = new mapboxgl.Map({
                     container: mapContainer.current,
                     accessToken: MAPBOX_TOKEN,
-                    style: 'mapbox://styles/mapbox/satellite-streets-v12?optimize=true',
+                    style: 'mapbox://styles/mapbox/satellite-v9',
                     center: [initLon, initLat],
                     zoom: 19.5,
                     pitch: 0,
                     antialias: true,
                     trackResize: true,
+                    preserveDrawingBuffer: true, // CRITICAL for screenshots/debugging
                     attributionControl: false
                 });
 
                 const markReady = () => {
                     if (!isMapReady) {
-                        console.log('[MAP_ENGINE] READY');
-                        // Force a camera update and resize to unstick black canvas
-                        m.jumpTo({ center: [initLon, initLat], zoom: 19.5 });
+                        console.log('[MAP_ENGINE] READY. Center:', m.getCenter());
+
+                        // DEBUG: Add a background color to verify WebGL context
+                        if (m.getStyle() && !m.getLayer('debug-bg')) {
+                            m.addLayer({
+                                id: 'debug-bg',
+                                type: 'background',
+                                paint: { 'background-color': '#0f172a' } // Slate-900 (should cover if tiles missing)
+                            });
+                        }
+
+                        // Force refresh
                         m.resize();
                         setIsMapReady(true);
                     }
