@@ -249,8 +249,9 @@ export function MapBoundaryView({
                             {isTooFar ? 'BOUNDS EXCEEDED: Stay near origin' :
                                 isAreaTooLarge ? 'CATCHMENT TOO LARGE: Limit 3500m²' :
                                     isAreaTooSmall ? 'CATCHMENT TOO SMALL: Needs 2m²' :
-                                        vertices.length < minVertices ? `SELECT ${minVertices - vertices.length} MORE NODES` :
-                                            'GEOMETRY VALID: READY'}
+                                        (gps.accuracy || 0) > 8 && vertices.length < minVertices ? 'LOW SIGNAL: Align nodes with physical curbs' :
+                                            vertices.length < minVertices ? `SELECT ${minVertices - vertices.length} MORE NODES` :
+                                                'GEOMETRY VALID: READY'}
                         </p>
                     </div>
                 </div>
@@ -285,6 +286,15 @@ export function MapBoundaryView({
                         <span className="text-gray-500">RADIUS</span>
                         <span className={`font-bold ${isTooFar ? 'text-red-500' : 'text-white'}`}>
                             {vertices.length > 0 ? CoordinateTransform.haversineDistance({ lat: gps.lat!, lon: gps.lon! }, vertices[vertices.length - 1]).toFixed(1) : '0.0'}m
+                        </span>
+                    </div>
+                    <div className="h-px bg-white/10 my-0.5" />
+                    <div className="flex justify-between gap-4">
+                        <span className="text-gray-500 uppercase">Signal</span>
+                        <span className={`font-black ${(gps.accuracy || 100) < 5 ? 'text-emerald-500' :
+                            (gps.accuracy || 100) < 12 ? 'text-cyan-400' : 'text-amber-500'
+                            }`}>
+                            ±{(gps.accuracy || 0).toFixed(1)}m
                         </span>
                     </div>
                 </div>
