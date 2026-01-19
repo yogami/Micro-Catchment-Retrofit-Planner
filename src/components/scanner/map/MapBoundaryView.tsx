@@ -111,6 +111,15 @@ export function MapBoundaryView({
                 m.on('render', () => { if (!isMapReady) markReady(); });
                 m.on('load', () => { markReady(); m.resize(); });
 
+                // VERTEX PLACEMENT VIA MAP CLICK
+                m.on('click', (e) => {
+                    setVertices(prev => {
+                        if (prev.length >= (maxVertices || 10)) return prev;
+                        if (navigator.vibrate) navigator.vibrate(20);
+                        return [...prev, { lat: e.lngLat.lat, lon: e.lngLat.lng }];
+                    });
+                });
+
                 m.on('error', (e) => {
                     console.error('[MAP_ENGINE] Error:', e);
                     const err = e.error || e;
@@ -134,7 +143,7 @@ export function MapBoundaryView({
         }, 100);
 
         return () => clearTimeout(timer);
-    }, [gps.lat, gps.lon]);
+    }, [gps.lat, gps.lon, maxVertices]);
 
     const handleRetry = useCallback(() => {
         setMapInitError(false);
@@ -210,30 +219,6 @@ export function MapBoundaryView({
         onBoundaryConfirmed(GeoPolygon.create(vertices));
     }, [vertices, isValid, onBoundaryConfirmed]);
 
-    const handleContainerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        if (vertices.length >= maxVertices) return;
-
-        let newVertex: GeoVertex;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        if (map.current && isMapReady) {
-            const lngLat = map.current.unproject([x, y]);
-            newVertex = { lat: lngLat.lat, lon: lngLat.lng };
-        } else {
-            const dx = (x - rect.width / 2) * 0.1;
-            const dy = (rect.height / 2 - y) * 0.1;
-            newVertex = {
-                lat: (gps.lat || 0) + (dy / 111320),
-                lon: (gps.lon || 0) + (dx / (111320 * Math.cos((gps.lat || 0) * Math.PI / 180)))
-            };
-        }
-
-        setVertices(prev => [...prev, newVertex]);
-        if (navigator.vibrate) navigator.vibrate(20);
-    }, [vertices.length, maxVertices, gps.lat, gps.lon, isMapReady]);
-
     if (!gps.lat || !gps.lon) {
         return <GPSWaitingView accuracy={gps.accuracy} error={gps.error} onSpoof={gps.spoof} />;
     }
@@ -244,27 +229,20 @@ export function MapBoundaryView({
         <div className="relative w-full h-full bg-[#020617] overflow-hidden" data-testid="map-boundary-view">
             {/* 
                 CRITICAL FIX: Isolated Map Container 
-                Wrapped in an absolute div to prevent Mapbox from collapsing the layout 
-                when it injects its own relative positioning.
-            */}
-            {/* 
-                CRITICAL FIX: Forced Map Context 
-                We use inline !important styles to ensure Mapbox's internal 
-                'position: relative' injection does NOT collapse the element 
-                to 0px height.
+                Set pointer-events-auto to ensure map interactivity.
             */}
             <div
                 ref={mapContainer}
-                className="absolute inset-0 z-10"
+                className="absolute inset-0 z-10 pointer-events-auto"
                 data-testid="map-canvas-container"
             />
 
             {/* 
                 ULTRA-VISIBLE GRID OVERLAY 
-                Increased opacity and more vibrant border to ensure visibility on all hardware.
+                For spatial context. pointer-events-none ensures it doesn't block map navigation.
             */}
-            <div className="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px pointer-events-none z-20 opacity-80">
-                {Array.from({ length: 144 }).map((_, i) => <div key={i} className="border-[1px] border-emerald-500/60" />)}
+            <div className="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-px pointer-events-none z-15 opacity-30">
+                {Array.from({ length: 144 }).map((_, i) => <div key={i} className="border-[0.5px] border-emerald-500/20" />)}
             </div>
 
             {/* 
@@ -281,13 +259,6 @@ export function MapBoundaryView({
                     />
                 </div>
             )}
-
-            {/* Click Capture Overlay */}
-            <div
-                className="absolute inset-0 z-30 cursor-crosshair"
-                onClick={handleContainerClick}
-                data-testid="click-capture-overlay"
-            />
 
             <ScannerHUD color={isTooFar || isAreaTooLarge ? 'amber' : 'emerald'} />
 
@@ -328,7 +299,7 @@ export function MapBoundaryView({
                 statusMessage={isTooFar ? "Out of safe range" : isAreaTooLarge ? "Above max area" : isAreaTooSmall ? "Area too small" : ""}
             />
 
-            <div className="absolute bottom-32 right-6 z-40 bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-[9px] font-mono pointer-events-none shadow-2xl min-w-[140px]">
+            <div className="absolute bottom-28 right-2 z-40 bg-black/90 backdrop-blur-2xl p-4 rounded-3xl border border-white/10 text-[9px] font-mono pointer-events-none shadow-[0_20px_50px_rgba(0,0,0,0.5)] min-w-[150px]">
                 <div className="flex flex-col gap-1.5">
                     <div className="flex justify-between items-center text-emerald-400 font-black">
                         <span>NODES</span>
