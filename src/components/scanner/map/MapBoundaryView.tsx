@@ -219,6 +219,17 @@ export function MapBoundaryView({
         onBoundaryConfirmed(GeoPolygon.create(vertices));
     }, [vertices, isValid, onBoundaryConfirmed]);
 
+    const handleRecenter = useCallback(() => {
+        if (map.current && gps.lat && gps.lon) {
+            map.current.easeTo({
+                center: [gps.lon, gps.lat],
+                zoom: 18,
+                duration: 1500,
+                essential: true
+            });
+        }
+    }, [gps.lat, gps.lon]);
+
     if (!gps.lat || !gps.lon) {
         return <GPSWaitingView accuracy={gps.accuracy} error={gps.error} onSpoof={gps.spoof} />;
     }
@@ -298,6 +309,21 @@ export function MapBoundaryView({
                 onCancel={onCancel}
                 statusMessage={isTooFar ? "Out of safe range" : isAreaTooLarge ? "Above max area" : isAreaTooSmall ? "Area too small" : ""}
             />
+
+            {/* RECENTER BUTTON (Google Maps Style) */}
+            <button
+                onClick={handleRecenter}
+                className="absolute bottom-[280px] right-4 z-40 w-12 h-12 bg-black/80 backdrop-blur-xl border border-white/10 rounded-2xl flex items-center justify-center text-emerald-500 shadow-2xl hover:bg-emerald-500 hover:text-black transition-all duration-300 group active:scale-90 pointer-events-auto"
+                title="Recenter to Location"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+                    <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" strokeWidth="2" />
+                    <line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" strokeWidth="2" />
+                    <line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" strokeWidth="2" />
+                    <line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" />
+                </svg>
+            </button>
 
             <div className="absolute bottom-28 right-2 z-40 bg-black/90 backdrop-blur-2xl p-4 rounded-3xl border border-white/10 text-[9px] font-mono pointer-events-none shadow-[0_20px_50px_rgba(0,0,0,0.5)] min-w-[150px]">
                 <div className="flex flex-col gap-1.5">
